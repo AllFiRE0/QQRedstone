@@ -203,20 +203,22 @@ public class RedstoneUpdate implements Listener {
                 switchData.setPowered(isOn);
                 block.setBlockData(switchData);
             } else {
-                // Кнопка/Плита/Громоотвод/Факел → Кнопка: импульс (нажать и отпустить)
-                switchData.setPowered(true);
-                block.setBlockData(switchData);
-                // Отпускаем через 15 тиков
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    Block b = block;
-                    if (b.getType().name().contains("BUTTON") && b.getBlockData() instanceof Switch) {
-                        Switch s = (Switch) b.getBlockData();
-                        if (s.isPowered()) {
-                            s.setPowered(false);
-                            b.setBlockData(s);
+                // Кнопка/Плита/Громоотвод/Факел → Кнопка: импульс ТОЛЬКО при включении
+                if (isOn) {
+                    switchData.setPowered(true);
+                    block.setBlockData(switchData);
+                    // Отпускаем через 15 тиков
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        Block b = block;
+                        if (b.getType().name().contains("BUTTON") && b.getBlockData() instanceof Switch) {
+                            Switch s = (Switch) b.getBlockData();
+                            if (s.isPowered()) {
+                                s.setPowered(false);
+                                b.setBlockData(s);
+                            }
                         }
-                    }
-                }, 15L);
+                    }, 15L);
+                }
             }
             return;
         }
@@ -250,19 +252,21 @@ public class RedstoneUpdate implements Listener {
                 powerable.setPowered(isOn);
                 block.setBlockData(powerable);
             } else {
-                // Кнопка/Плита/Громоотвод/Факел → Плита: импульс
-                powerable.setPowered(true);
-                block.setBlockData(powerable);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    Block b = block;
-                    if (b.getType().name().contains("PRESSURE_PLATE") && b.getBlockData() instanceof org.bukkit.block.data.Powerable) {
-                        org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) b.getBlockData();
-                        if (p.isPowered()) {
-                            p.setPowered(false);
-                            b.setBlockData(p);
+                // Кнопка/Плита/Громоотвод/Факел → Плита: импульс ТОЛЬКО при включении
+                if (isOn) {
+                    powerable.setPowered(true);
+                    block.setBlockData(powerable);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        Block b = block;
+                        if (b.getType().name().contains("PRESSURE_PLATE") && b.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+                            org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) b.getBlockData();
+                            if (p.isPowered()) {
+                                p.setPowered(false);
+                                b.setBlockData(p);
+                            }
                         }
-                    }
-                }, 15L);
+                    }, 15L);
+                }
             }
             return;
         }
@@ -275,18 +279,21 @@ public class RedstoneUpdate implements Listener {
                 rodData.setPowered(isOn);
                 block.setBlockData(rodData);
             } else {
-                rodData.setPowered(true);
-                block.setBlockData(rodData);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    Block b = block;
-                    if (b.getType().name().contains("LIGHTNING_ROD") && b.getBlockData() instanceof LightningRod) {
-                        LightningRod r = (LightningRod) b.getBlockData();
-                        if (r.isPowered()) {
-                            r.setPowered(false);
-                            b.setBlockData(r);
+                // Кнопка/Плита/Громоотвод/Факел → Громоотвод: импульс ТОЛЬКО при включении
+                if (isOn) {
+                    rodData.setPowered(true);
+                    block.setBlockData(rodData);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        Block b = block;
+                        if (b.getType().name().contains("LIGHTNING_ROD") && b.getBlockData() instanceof LightningRod) {
+                            LightningRod r = (LightningRod) b.getBlockData();
+                            if (r.isPowered()) {
+                                r.setPowered(false);
+                                b.setBlockData(r);
+                            }
                         }
-                    }
-                }, 15L);
+                    }, 15L);
+                }
             }
             return;
         }
@@ -301,19 +308,21 @@ public class RedstoneUpdate implements Listener {
                 lightable.setLit(!isOn);
                 block.setBlockData(lightable);
             } else {
-                // Кнопка → Факел: импульс (мигание)
-                boolean current = lightable.isLit();
-                lightable.setLit(!current);
-                block.setBlockData(lightable);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    Block b = block;
-                    if ((b.getType().name().equals("REDSTONE_TORCH") || b.getType().name().equals("REDSTONE_WALL_TORCH"))
-                            && b.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                        org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) b.getBlockData();
-                        l.setLit(current);
-                        b.setBlockData(l);
-                    }
-                }, 15L);
+                // Кнопка/Плита/Громоотвод/Факел → Факел: импульс (мигание) ТОЛЬКО при включении
+                if (isOn) {
+                    boolean current = lightable.isLit();
+                    lightable.setLit(!current);
+                    block.setBlockData(lightable);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        Block b = block;
+                        if ((b.getType().name().equals("REDSTONE_TORCH") || b.getType().name().equals("REDSTONE_WALL_TORCH"))
+                                && b.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                            org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) b.getBlockData();
+                            l.setLit(current);
+                            b.setBlockData(l);
+                        }
+                    }, 15L);
+                }
             }
             return;
         }
