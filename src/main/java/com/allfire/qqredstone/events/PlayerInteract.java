@@ -1,9 +1,14 @@
 package com.allfire.qqredstone.events;
 
 import com.allfire.qqredstone.QQRedstone;
+import com.allfire.qqredstone.database.DatabaseManager;
+import com.allfire.qqredstone.database.Mechanism;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.Directional;
+import org.bukkit.block.data.Powerable;
+import org.bukkit.block.data.type.LightningRod;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -19,11 +24,18 @@ import java.util.List;
 
 public class PlayerInteract implements Listener {
 
+    private final QQRedstone plugin;
+    private final DatabaseManager databaseManager;
+
+    public PlayerInteract(QQRedstone plugin, DatabaseManager databaseManager) {
+        this.plugin = plugin;
+        this.databaseManager = databaseManager;
+    }
+
     @EventHandler(priority = EventPriority.LOWEST)
     public void onMechanismClick(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         
-        // Принимаем и RIGHT_CLICK_BLOCK и PHYSICAL (для плит)
         Action action = event.getAction();
         if (action != Action.RIGHT_CLICK_BLOCK && action != Action.PHYSICAL)
             return;
@@ -35,8 +47,6 @@ public class PlayerInteract implements Listener {
         ItemStack itemInHand = event.getItem();
         if (itemInHand == null || itemInHand.getType() != Material.WRITABLE_BOOK)
             return;
-
-        QQRedstone plugin = QQRedstone.getInstance();
 
         BookMeta bookMeta = (BookMeta) itemInHand.getItemMeta();
         if (bookMeta == null)
@@ -53,30 +63,27 @@ public class PlayerInteract implements Listener {
             role = "receiver";
         }
 
-        // Книга не подписана — выходим молча
         if (role == null) {
             return;
         }
 
-        // Проверяем механизм
         if (!isValidMechanism(clickedBlock, role)) {
+            plugin.sendMessage(player, "wrong-mechanism");
             return;
         }
 
-        // СРАЗУ отменяем событие (книга не откроется)
+        // Сразу отменяем открытие книги
         event.setCancelled(true);
         event.setUseInteractedBlock(Event.Result.DENY);
         event.setUseItemInHand(Event.Result.DENY);
 
-        // Дальше все проверки...
+        // Проверки прав
         String worldName = clickedBlock.getWorld().getName();
         if (!player.hasPermission("qqredstone.worlds.use." + worldName) 
                 && !player.hasPermission("qqredstone.worlds.use.*")) {
             plugin.sendMessage(player, "world-denied", "%world%", worldName);
             return;
         }
-
-        String frequency = (bookMeta.getPageCount() > 0) ? bookMeta.getPage(1).trim() : "0";
 
         if (!plugin.getWorldGuardUtils().canBuild(player, clickedBlock)) {
             plugin.sendMessage(player, "no-permission-region");
@@ -105,11 +112,17 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        if (isOwnedByOther(player, clickedBlock)) {
+        // Проверка владельца
+        if (databaseManager.isOwnedByOther(clickedBlock, player.getUniqueId().toString(),
+                player.hasPermission("qqredstone.admin.override"))) {
             plugin.sendMessage(player, "already-owned");
             return;
         }
 
+        // Частота
+        String frequency = (bookMeta.getPageCount() > 0) ? bookMeta.getPage(1).trim() : "0";
+
+        // Мощность
         int bookPower = readBookPower(bookMeta);
         int maxPowerByPerms = getMaxPowerByPermission(player);
         int maxPowerByRegion = plugin.getWorldGuardUtils().getMaxPower(player, clickedBlock);
@@ -134,7 +147,16 @@ public class PlayerInteract implements Listener {
             }
         }
 
-        saveLocation(player, clickedBlock, frequency, role, bookPowerUsed ? savedPower : 0);
+        // НОВОЕ: Определяем attached блок и below блок
+        Mechanism mechanism = createMechanismFromBlock(clickedBlock, role, frequency, 
+                player.getUniqueId().toString(), savedPower);
+        
+        if (mechanism == null) {
+            plugin.sendMessage(player, "wrong-mechanism");
+            return;
+        }
+
+        databaseManager.addMechanism(mechanism);
 
         if (role.equals("sender")) {
             if (bookPowerUsed && savedPower > 0) {
@@ -153,6 +175,72 @@ public class PlayerInteract implements Listener {
                 plugin.sendMessage(player, "registered-receiver", "%frequency%", frequency);
             }
         }
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Создаёт объект Mechanism с определением attached/below блоков
+     */
+    private Mechanism createMechanismFromBlock(Block block, String type, String frequency, 
+                                                String ownerUuid, int bookPower) {
+        Mechanism mechanism = new Mechanism();
+        mechanism.setType(type);
+        mechanism.setFrequency(frequency);
+        mechanism.setOwnerUuid(ownerUuid);
+        mechanism.setWorld(block.getWorld().getName());
+        mechanism.setX(block.getX());
+        mechanism.setY(block.getY());
+        mechanism.setZ(block.getZ());
+        mechanism.setBookPower(bookPower);
+        
+        String blockTypeName = block.getType().name();
+        Block attachedBlock = null;
+        BlockFace attachedFace = null;
+        Block belowBlock = null;
+        
+        // Определяем attached блок в зависимости от типа механизма
+        if (blockTypeName.equals("LEVER") || blockTypeName.contains("BUTTON") ||
+            blockTypeName.equals("REDSTONE_WALL_TORCH")) {
+            // Настенные механизмы (крепится к блоку, на который указывает)
+            if (block.getBlockData() instanceof Directional) {
+                Directional directional = (Directional) block.getBlockData();
+                attachedFace = directional.getFacing().getOppositeFace();
+                attachedBlock = block.getRelative(attachedFace);
+            }
+        }
+        else if (blockTypeName.equals("REDSTONE_TORCH") || blockTypeName.contains("PRESSURE_PLATE") ||
+                 blockTypeName.contains("LIGHTNING_ROD")) {
+            // Механизмы, которые стоят на блоке СНИЗУ
+            attachedBlock = block.getRelative(BlockFace.DOWN);
+            attachedFace = BlockFace.DOWN;
+        }
+        
+        // Для плит: дополнительно сохраняем блок под плитой (тот же самый)
+        if (blockTypeName.contains("PRESSURE_PLATE")) {
+            belowBlock = attachedBlock;
+        }
+        
+        if (attachedBlock == null) {
+            return null; // Не удалось определить прикрепление
+        }
+        
+        // Сохраняем attached данные
+        mechanism.setAttachedWorld(attachedBlock.getWorld().getName());
+        mechanism.setAttachedX(attachedBlock.getX());
+        mechanism.setAttachedY(attachedBlock.getY());
+        mechanism.setAttachedZ(attachedBlock.getZ());
+        mechanism.setAttachedType(attachedBlock.getType().name());
+        mechanism.setAttachedFace(attachedFace != null ? attachedFace.name() : "UP");
+        
+        // Сохраняем below данные (для плит)
+        if (belowBlock != null) {
+            mechanism.setBelowWorld(belowBlock.getWorld().getName());
+            mechanism.setBelowX(belowBlock.getX());
+            mechanism.setBelowY(belowBlock.getY());
+            mechanism.setBelowZ(belowBlock.getZ());
+            mechanism.setBelowType(belowBlock.getType().name());
+        }
+        
+        return mechanism;
     }
 
     private int readBookPower(BookMeta meta) {
@@ -177,7 +265,6 @@ public class PlayerInteract implements Listener {
     }
 
     private boolean isValidMechanism(Block block, String role) {
-        QQRedstone plugin = QQRedstone.getInstance();
         String type = block.getType().name();
 
         boolean acceptAll = plugin.getConfig().getBoolean("mechanism.accept-all", false);
@@ -197,22 +284,16 @@ public class PlayerInteract implements Listener {
             allowedTypes.add(singleType);
         }
 
-        String material = plugin.getConfig().getString("mechanism." + role + "-material", "");
-
         for (String allowed : allowedTypes) {
             switch (allowed) {
                 case "LEVER":
                     if (type.equals("LEVER")) return true;
                     break;
                 case "BUTTON":
-                    if (type.contains("BUTTON")) {
-                        if (material.isEmpty() || type.equals(material)) return true;
-                    }
+                    if (type.contains("BUTTON")) return true;
                     break;
                 case "PRESSURE_PLATE":
-                    if (type.contains("PRESSURE_PLATE")) {
-                        if (material.isEmpty() || type.equals(material)) return true;
-                    }
+                    if (type.contains("PRESSURE_PLATE")) return true;
                     break;
                 case "LIGHTNING_ROD":
                     if (type.contains("LIGHTNING_ROD")) return true;
@@ -222,80 +303,6 @@ public class PlayerInteract implements Listener {
                     break;
             }
         }
-
         return false;
-    }
-
-    private boolean isOwnedByOther(Player player, Block block) {
-        QQRedstone plugin = QQRedstone.getInstance();
-        String locStr = getLocString(block);
-        String ownerKey = "ownership." + locStr.replace(",", ".");
-        String owner = plugin.getConfig().getString(ownerKey);
-
-        ConfigurationSection data = plugin.getConfig().getConfigurationSection("data");
-        if (data == null) return false;
-
-        for (String freq : data.getKeys(false)) {
-            List<String> senders = plugin.getConfig().getStringList("data." + freq + ".senders");
-            List<String> receivers = plugin.getConfig().getStringList("data." + freq + ".receivers");
-
-            if ((senders.contains(locStr) || receivers.contains(locStr))
-                    && owner != null && !owner.equals(player.getUniqueId().toString())) {
-                return !player.hasPermission("qqredstone.admin.override");
-            }
-        }
-        return false;
-    }
-
-    private void saveLocation(Player player, Block block, String freq, String type, int bookPower) {
-        QQRedstone plugin = QQRedstone.getInstance();
-        String locString = getLocString(block);
-        String path = "data." + freq + "." + type + "s";
-
-        List<String> locations = plugin.getConfig().getStringList(path);
-        if (locations == null)
-            locations = new ArrayList<>();
-
-        boolean changed = false;
-
-        if (!locations.contains(locString)) {
-            // Новая запись
-            locations.add(locString);
-            plugin.getConfig().set(path, locations);
-            changed = true;
-        }
-
-        // Всегда обновляем владельца и мощность
-        String ownerKey = "ownership." + locString.replace(",", ".");
-        String oldOwner = plugin.getConfig().getString(ownerKey);
-        String newOwner = player.getUniqueId().toString();
-
-        if (!newOwner.equals(oldOwner)) {
-            plugin.getConfig().set(ownerKey, newOwner);
-            changed = true;
-        }
-
-        String powerKey = "book-power." + locString.replace(",", ".");
-        int oldPower = plugin.getConfig().getInt(powerKey, -1);
-
-        if (bookPower > 0 && bookPower != oldPower) {
-            plugin.getConfig().set(powerKey, bookPower);
-            changed = true;
-        } else if (bookPower == 0 && oldPower > 0) {
-            // Если раньше была мощность, а теперь нет — удаляем ключ
-            plugin.getConfig().set(powerKey, null);
-            changed = true;
-        }
-
-        if (changed) {
-            plugin.saveConfig();
-        }
-    }
-
-    private String getLocString(Block block) {
-        return block.getWorld().getName() + "," 
-            + block.getX() + "," 
-            + block.getY() + "," 
-            + block.getZ();
     }
 }
