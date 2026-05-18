@@ -199,11 +199,11 @@ public class RedstoneUpdate implements Listener {
             Switch switchData = (Switch) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Кнопка: кнопка повторяет состояние (держится/отжата)
+                // Рычаг → Кнопка: повторяет состояние (держится/отжата)
                 switchData.setPowered(isOn);
                 block.setBlockData(switchData);
             } else {
-                // Кнопка/Плита/Громоотвод → Кнопка: импульс при ЛЮБОМ изменении
+                // Кнопка/Плита/Громоотвод → Кнопка: импульс
                 switchData.setPowered(true);
                 block.setBlockData(switchData);
                 
@@ -246,16 +246,54 @@ public class RedstoneUpdate implements Listener {
         // ===== НАЖИМНАЯ ПЛИТА =====
         if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
             org.bukkit.block.data.Powerable powerable = (org.bukkit.block.data.Powerable) block.getBlockData();
-            powerable.setPowered(isOn);
-            block.setBlockData(powerable);
+            
+            if (senderType.equals("LEVER")) {
+                // Рычаг → Плита: повторяет состояние
+                powerable.setPowered(isOn);
+                block.setBlockData(powerable);
+            } else {
+                // Кнопка/Плита/Громоотвод → Плита: импульс
+                powerable.setPowered(true);
+                block.setBlockData(powerable);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    Block currentBlock = block;
+                    if (currentBlock.getType().name().contains("PRESSURE_PLATE") 
+                            && currentBlock.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+                        org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) currentBlock.getBlockData();
+                        if (p.isPowered()) {
+                            p.setPowered(false);
+                            currentBlock.setBlockData(p);
+                        }
+                    }
+                }, 15L);
+            }
             return;
         }
 
         // ===== ГРОМООТВОД =====
         if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
             LightningRod rodData = (LightningRod) block.getBlockData();
-            rodData.setPowered(isOn);
-            block.setBlockData(rodData);
+            
+            if (senderType.equals("LEVER")) {
+                // Рычаг → Громоотвод: повторяет состояние
+                rodData.setPowered(isOn);
+                block.setBlockData(rodData);
+            } else {
+                // Кнопка/Плита/Громоотвод → Громоотвод: импульс
+                rodData.setPowered(true);
+                block.setBlockData(rodData);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    Block currentBlock = block;
+                    if (currentBlock.getType().name().contains("LIGHTNING_ROD") 
+                            && currentBlock.getBlockData() instanceof LightningRod) {
+                        LightningRod r = (LightningRod) currentBlock.getBlockData();
+                        if (r.isPowered()) {
+                            r.setPowered(false);
+                            currentBlock.setBlockData(r);
+                        }
+                    }
+                }, 15L);
+            }
             return;
         }
 
@@ -263,10 +301,29 @@ public class RedstoneUpdate implements Listener {
         if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
-            boolean shouldBeLit = !isOn;
-            if (lightable.isLit() != shouldBeLit) {
-                lightable.setLit(shouldBeLit);
+            
+            if (senderType.equals("LEVER")) {
+                // Рычаг → Факел: инверсия (повторяет состояние)
+                boolean shouldBeLit = !isOn;
+                if (lightable.isLit() != shouldBeLit) {
+                    lightable.setLit(shouldBeLit);
+                    block.setBlockData(lightable);
+                }
+            } else {
+                // Кнопка/Плита/Громоотвод → Факел: импульс с инверсией
+                boolean currentLit = lightable.isLit();
+                lightable.setLit(!currentLit);
                 block.setBlockData(lightable);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    Block currentBlock = block;
+                    if ((currentBlock.getType().name().equals("REDSTONE_TORCH") || 
+                         currentBlock.getType().name().equals("REDSTONE_WALL_TORCH"))
+                            && currentBlock.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                        org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) currentBlock.getBlockData();
+                        l.setLit(currentLit);
+                        currentBlock.setBlockData(l);
+                    }
+                }, 15L);
             }
             return;
         }
