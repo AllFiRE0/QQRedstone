@@ -199,23 +199,21 @@ public class RedstoneUpdate implements Listener {
             Switch switchData = (Switch) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Кнопка: повторяет состояние (держится/отжата)
+                // Рычаг → Кнопка: повторяет состояние (держится)
                 switchData.setPowered(isOn);
                 block.setBlockData(switchData);
             } else {
-                // Кнопка/Плита/Громоотвод → Кнопка: импульс
+                // Кнопка/Плита/Громоотвод/Факел → Кнопка: импульс (нажать и отпустить)
                 switchData.setPowered(true);
                 block.setBlockData(switchData);
-                
-                // Через 15 тиков отжимаем
+                // Отпускаем через 15 тиков
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    Block currentBlock = block;
-                    if (currentBlock.getType().name().contains("BUTTON") 
-                            && currentBlock.getBlockData() instanceof Switch) {
-                        Switch s = (Switch) currentBlock.getBlockData();
+                    Block b = block;
+                    if (b.getType().name().contains("BUTTON") && b.getBlockData() instanceof Switch) {
+                        Switch s = (Switch) b.getBlockData();
                         if (s.isPowered()) {
                             s.setPowered(false);
-                            currentBlock.setBlockData(s);
+                            b.setBlockData(s);
                         }
                     }
                 }, 15L);
@@ -234,7 +232,7 @@ public class RedstoneUpdate implements Listener {
                     block.setBlockData(switchData);
                 }
             } else {
-                // Рычаг/Плита/Громоотвод → Рычаг: повторение состояния
+                // Рычаг/Плита/Громоотвод/Факел → Рычаг: повторяет состояние
                 if (switchData.isPowered() != isOn) {
                     switchData.setPowered(isOn);
                     block.setBlockData(switchData);
@@ -248,21 +246,20 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Powerable powerable = (org.bukkit.block.data.Powerable) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Плита: повторяет состояние
+                // Рычаг → Плита: повторяет состояние (держится)
                 powerable.setPowered(isOn);
                 block.setBlockData(powerable);
             } else {
-                // Кнопка/Плита/Громоотвод → Плита: импульс
+                // Кнопка/Плита/Громоотвод/Факел → Плита: импульс
                 powerable.setPowered(true);
                 block.setBlockData(powerable);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    Block currentBlock = block;
-                    if (currentBlock.getType().name().contains("PRESSURE_PLATE") 
-                            && currentBlock.getBlockData() instanceof org.bukkit.block.data.Powerable) {
-                        org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) currentBlock.getBlockData();
+                    Block b = block;
+                    if (b.getType().name().contains("PRESSURE_PLATE") && b.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+                        org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) b.getBlockData();
                         if (p.isPowered()) {
                             p.setPowered(false);
-                            currentBlock.setBlockData(p);
+                            b.setBlockData(p);
                         }
                     }
                 }, 15L);
@@ -275,21 +272,18 @@ public class RedstoneUpdate implements Listener {
             LightningRod rodData = (LightningRod) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Громоотвод: повторяет состояние
                 rodData.setPowered(isOn);
                 block.setBlockData(rodData);
             } else {
-                // Кнопка/Плита/Громоотвод → Громоотвод: импульс
                 rodData.setPowered(true);
                 block.setBlockData(rodData);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    Block currentBlock = block;
-                    if (currentBlock.getType().name().contains("LIGHTNING_ROD") 
-                            && currentBlock.getBlockData() instanceof LightningRod) {
-                        LightningRod r = (LightningRod) currentBlock.getBlockData();
+                    Block b = block;
+                    if (b.getType().name().contains("LIGHTNING_ROD") && b.getBlockData() instanceof LightningRod) {
+                        LightningRod r = (LightningRod) b.getBlockData();
                         if (r.isPowered()) {
                             r.setPowered(false);
-                            currentBlock.setBlockData(r);
+                            b.setBlockData(r);
                         }
                     }
                 }, 15L);
@@ -303,25 +297,21 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Факел: инверсия (повторяет состояние)
-                boolean shouldBeLit = !isOn;
-                if (lightable.isLit() != shouldBeLit) {
-                    lightable.setLit(shouldBeLit);
-                    block.setBlockData(lightable);
-                }
+                // Рычаг → Факел: инверсия
+                lightable.setLit(!isOn);
+                block.setBlockData(lightable);
             } else {
-                // Кнопка/Плита/Громоотвод → Факел: импульс с инверсией
-                boolean currentLit = lightable.isLit();
-                lightable.setLit(!currentLit);
+                // Кнопка → Факел: импульс (мигание)
+                boolean current = lightable.isLit();
+                lightable.setLit(!current);
                 block.setBlockData(lightable);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    Block currentBlock = block;
-                    if ((currentBlock.getType().name().equals("REDSTONE_TORCH") || 
-                         currentBlock.getType().name().equals("REDSTONE_WALL_TORCH"))
-                            && currentBlock.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                        org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) currentBlock.getBlockData();
-                        l.setLit(currentLit);
-                        currentBlock.setBlockData(l);
+                    Block b = block;
+                    if ((b.getType().name().equals("REDSTONE_TORCH") || b.getType().name().equals("REDSTONE_WALL_TORCH"))
+                            && b.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                        org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) b.getBlockData();
+                        l.setLit(current);
+                        b.setBlockData(l);
                     }
                 }, 15L);
             }
