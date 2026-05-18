@@ -10,15 +10,12 @@ messages:
   registered-receiver: "&aRegistered RECEIVER (Freq: %frequency%)"
   registered-sender-power: "&aRegistered SENDER (Freq: %frequency%, Power: %power%)"
   registered-receiver-power: "&aRegistered RECEIVER (Freq: %frequency%, Power: %power%)"
-  
   # ActionBar example
   device-removed: "actionbar! &cWireless device removed!"
   world-denied: "actionbar! &cYou can't use QQRedstone in world %world%!"
-  
   # Title example
   no-permission-region: "title! &cNo Access|&7You can't build in this region"
   region-denied: "title! &cQQRedstone Disabled|&7Transmitters are forbidden here"
-  
   # Chat
   plugin-enabled: "&aQQRedstone is now active! Ready to transmit."
   no-permission-mechanism: "&cYou don't have permission for this mechanism!"
@@ -27,3 +24,4 @@ messages:
   region-denied-sender: "&cSenders are disabled in this region!"
   region-denied-receiver: "&cReceivers are disabled in this region!"
   power-limited: "&ePower limited! Max: %max%, Book: %book%"
+  device-overwritten: "&eDevice on this block has been overwritten!"
