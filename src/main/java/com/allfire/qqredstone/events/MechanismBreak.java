@@ -36,14 +36,14 @@ public class MechanismBreak implements Listener {
             return;
         }
 
-        // СЦЕНАРИЙ 2: Сломали блок, к которому прикреплён механизм (стена под кнопкой/рычагом)
+        // СЦЕНАРИЙ 2: Сломали блок, к которому прикреплён механизм (стена/пол/потолок)
         List<Mechanism> attachedMechanisms = databaseManager.getMechanismsAttachedTo(block);
         for (Mechanism m : attachedMechanisms) {
             databaseManager.removeMechanism(m.getWorld(), m.getX(), m.getY(), m.getZ());
             removed = true;
         }
 
-        // СЦЕНАРИЙ 3: Сломали блок под нажимной плитой (если не покрыто сценарием 2)
+        // СЦЕНАРИЙ 3: Сломали блок ПОД механизмом (для плит, громоотводов, факелов на полу)
         List<Mechanism> belowMechanisms = databaseManager.getMechanismsBelow(block);
         for (Mechanism m : belowMechanisms) {
             // Проверяем, не был ли этот механизм уже удалён через attached
