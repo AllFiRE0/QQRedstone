@@ -112,7 +112,7 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        // Проверка владельца
+        // Проверка владельца (с учётом админского оверрайда)
         if (databaseManager.isOwnedByOther(clickedBlock, player.getUniqueId().toString(),
                 player.hasPermission("qqredstone.admin.override"))) {
             plugin.sendMessage(player, "already-owned");
@@ -147,7 +147,7 @@ public class PlayerInteract implements Listener {
             }
         }
 
-        // НОВОЕ: Определяем attached блок и below блок
+        // Определяем attached блок и below блок
         Mechanism mechanism = createMechanismFromBlock(clickedBlock, role, frequency, 
                 player.getUniqueId().toString(), savedPower);
         
@@ -156,6 +156,15 @@ public class PlayerInteract implements Listener {
             return;
         }
 
+        // ПРОВЕРКА: Если уже есть механизм на этом блоке — удаляем старый
+        Mechanism existing = databaseManager.getMechanismAt(clickedBlock);
+        if (existing != null) {
+            databaseManager.removeMechanism(clickedBlock.getWorld().getName(),
+                    clickedBlock.getX(), clickedBlock.getY(), clickedBlock.getZ());
+            plugin.sendMessage(player, "device-overwritten");
+        }
+
+        // Добавляем новый механизм
         databaseManager.addMechanism(mechanism);
 
         if (role.equals("sender")) {
@@ -178,7 +187,7 @@ public class PlayerInteract implements Listener {
     }
 
     /**
-     * НОВЫЙ МЕТОД: Создаёт объект Mechanism с определением attached/below блоков
+     * Создаёт объект Mechanism с определением attached/below блоков
      */
     private Mechanism createMechanismFromBlock(Block block, String type, String frequency, 
                                                 String ownerUuid, int bookPower) {
