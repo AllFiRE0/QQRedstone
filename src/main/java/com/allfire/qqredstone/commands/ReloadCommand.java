@@ -1,6 +1,7 @@
 package com.allfire.qqredstone.commands;
 
 import com.allfire.qqredstone.QQRedstone;
+import com.allfire.qqredstone.database.DatabaseManager;
 import com.allfire.qqredstone.events.RedstoneUpdate;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -9,7 +10,14 @@ import org.bukkit.command.CommandSender;
 
 public class ReloadCommand implements CommandExecutor {
 
+    private final QQRedstone plugin;
+    private final DatabaseManager databaseManager;
     private RedstoneUpdate redstoneUpdate;
+
+    public ReloadCommand(QQRedstone plugin, DatabaseManager databaseManager) {
+        this.plugin = plugin;
+        this.databaseManager = databaseManager;
+    }
 
     public void setRedstoneUpdate(RedstoneUpdate redstoneUpdate) {
         this.redstoneUpdate = redstoneUpdate;
@@ -22,11 +30,9 @@ public class ReloadCommand implements CommandExecutor {
             return true;
         }
 
-        QQRedstone plugin = QQRedstone.getInstance();
-
         if (args.length == 0) {
             sender.sendMessage(ChatColor.YELLOW + "[QQR] Использование:");
-            sender.sendMessage(ChatColor.YELLOW + "  /qqredstone reload" + ChatColor.GRAY + " - перезагрузить конфиг");
+            sender.sendMessage(ChatColor.YELLOW + "  /qqredstone reload" + ChatColor.GRAY + " - перезагрузить конфиг и БД");
             sender.sendMessage(ChatColor.YELLOW + "  /qqredstone resetflood [частота]" + ChatColor.GRAY + " - сбросить блокировку частоты");
             sender.sendMessage(ChatColor.YELLOW + "  /qqredstone resetallfloods" + ChatColor.GRAY + " - сбросить все блокировки");
             return true;
@@ -36,7 +42,8 @@ public class ReloadCommand implements CommandExecutor {
             case "reload":
                 plugin.reloadConfig();
                 plugin.loadLanguage();
-                sender.sendMessage(ChatColor.GREEN + "[QQR] Конфиг перезагружен!");
+                databaseManager.reload();  // Перезагружаем кеш из БД
+                sender.sendMessage(ChatColor.GREEN + "[QQR] Конфиг и БД перезагружены!");
                 break;
 
             case "resetflood":
