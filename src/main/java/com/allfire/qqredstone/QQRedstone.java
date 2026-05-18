@@ -1,6 +1,7 @@
 package com.allfire.qqredstone;
 
 import com.allfire.qqredstone.commands.ReloadCommand;
+import com.allfire.qqredstone.database.DatabaseManager;
 import com.allfire.qqredstone.events.BookRename;
 import com.allfire.qqredstone.events.MechanismBreak;
 import com.allfire.qqredstone.events.PlayerInteract;
@@ -27,6 +28,7 @@ public class QQRedstone extends JavaPlugin {
     private String receiverName;
     private WorldGuardManager worldGuardManager;
     private WorldGuardUtils worldGuardUtils;
+    private DatabaseManager databaseManager;  // НОВОЕ
 
     public static QQRedstone getInstance() {
         return instance;
@@ -50,19 +52,24 @@ public class QQRedstone extends JavaPlugin {
 
         loadLanguage();
 
+        // НОВОЕ: Инициализация SQLite
+        databaseManager = new DatabaseManager(this);
+        databaseManager.initialize();
+
         // Инициализация WorldGuard
         worldGuardManager = new WorldGuardManager(this);
         worldGuardManager.initialize();
         worldGuardUtils = new WorldGuardUtils(this);
 
         PluginManager pluginManager = Bukkit.getPluginManager();
-        pluginManager.registerEvents(new PlayerInteract(), this);
-        pluginManager.registerEvents(new RedstoneUpdate(), this);
-        pluginManager.registerEvents(new MechanismBreak(), this);
+        
+        // Передаём DatabaseManager в события
+        pluginManager.registerEvents(new PlayerInteract(this, databaseManager), this);
+        pluginManager.registerEvents(new RedstoneUpdate(this, databaseManager), this);
+        pluginManager.registerEvents(new MechanismBreak(this, databaseManager), this);
         pluginManager.registerEvents(new BookRename(), this);
 
-        ReloadCommand reloadCommand = new ReloadCommand();
-        reloadCommand.setRedstoneUpdate(new RedstoneUpdate());
+        ReloadCommand reloadCommand = new ReloadCommand(this, databaseManager);
         getCommand("qqredstone").setExecutor(reloadCommand);
 
         getLogger().info(ChatColor.stripColor(getMessage("plugin-enabled")));
@@ -70,6 +77,9 @@ public class QQRedstone extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (databaseManager != null) {
+            databaseManager.close();
+        }
         getLogger().info("QQRedstone disabled.");
     }
 
@@ -138,4 +148,5 @@ public class QQRedstone extends JavaPlugin {
     public FileConfiguration getLangConfig() { return langConfig; }
     public WorldGuardManager getWorldGuardManager() { return worldGuardManager; }
     public WorldGuardUtils getWorldGuardUtils() { return worldGuardUtils; }
+    public DatabaseManager getDatabaseManager() { return databaseManager; }  // НОВОЕ
 }
