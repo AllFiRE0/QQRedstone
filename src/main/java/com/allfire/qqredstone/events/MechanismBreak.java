@@ -3,6 +3,7 @@ package com.allfire.qqredstone.events;
 import com.allfire.qqredstone.QQRedstone;
 import com.allfire.qqredstone.database.DatabaseManager;
 import com.allfire.qqredstone.database.Mechanism;
+import org.bukkit.Bukkit;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -37,18 +38,20 @@ public class MechanismBreak implements Listener {
         }
 
         // СЦЕНАРИЙ 2: Сломали блок, к которому прикреплён механизм (стена/пол/потолок)
+        // Это работает и для кнопок, и для рычагов, и для факелов
         List<Mechanism> attachedMechanisms = databaseManager.getMechanismsAttachedTo(block);
         for (Mechanism m : attachedMechanisms) {
             databaseManager.removeMechanism(m.getWorld(), m.getX(), m.getY(), m.getZ());
             removed = true;
         }
 
-        // СЦЕНАРИЙ 3: Сломали блок ПОД механизмом (для плит, громоотводов, факелов на полу)
+        // СЦЕНАРИЙ 3: Сломали блок ПОД механизмом (для плит)
+        // У плит below_block указывает на блок под плитой
         List<Mechanism> belowMechanisms = databaseManager.getMechanismsBelow(block);
         for (Mechanism m : belowMechanisms) {
-            // Проверяем, не был ли этот механизм уже удалён через attached
+            // Проверяем, не был ли этот механизм уже удалён
             if (databaseManager.getMechanismAt(
-                    org.bukkit.Bukkit.getWorld(m.getWorld()).getBlockAt(m.getX(), m.getY(), m.getZ())) != null) {
+                    Bukkit.getWorld(m.getWorld()).getBlockAt(m.getX(), m.getY(), m.getZ())) != null) {
                 databaseManager.removeMechanism(m.getWorld(), m.getX(), m.getY(), m.getZ());
                 removed = true;
             }
