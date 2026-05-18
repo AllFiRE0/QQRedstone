@@ -1,0 +1,29 @@
+device-names:
+  sender: "Отправитель"
+  receiver: "Получатель"
+
+messages:
+  prefix: "&6[QQR] &r"
+  
+  # Обычный чат
+  registered-sender: "&aЗарегистрирован ОТПРАВИТЕЛЬ (Частота: %frequency%)"
+  registered-receiver: "&aЗарегистрирован ПОЛУЧАТЕЛЬ (Частота: %frequency%)"
+  registered-sender-power: "&aЗарегистрирован ОТПРАВИТЕЛЬ (Частота: %frequency%, Мощность: %power%)"
+  registered-receiver-power: "&aЗарегистрирован ПОЛУЧАТЕЛЬ (Частота: %frequency%, Мощность: %power%)"
+  
+  # ActionBar пример
+  device-removed: "actionbar! &cБеспроводное устройство удалено!"
+  world-denied: "actionbar! &cВы не можете использовать беспроводные механизмы в мире %world%!"
+  
+  # Title пример
+  no-permission-region: "title! &cНет доступа|&7Вы не можете строить в этом регионе"
+  region-denied: "title! &cQQRedstone запрещён|&7В этом регионе запрещены передатчики"
+  
+  # Обычный чат
+  plugin-enabled: "&aQQRedstone активен! Готов к передаче сигналов."
+  no-permission-mechanism: "&cУ вас нет прав на создание этого механизма!"
+  already-owned: "&cЭто устройство принадлежит другому игроку!"
+  wrong-mechanism: "&cЭтот блок не является беспроводным механизмом!"
+  region-denied-sender: "&cСоздание отправителей запрещено в этом регионе!"
+  region-denied-receiver: "&cСоздание получателей запрещено в этом регионе!"
+  power-limited: "&eМощность ограничена! Макс: %max%, в книге: %book%"

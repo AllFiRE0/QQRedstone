@@ -1,0 +1,29 @@
+device-names:
+  sender: "Sender"
+  receiver: "Receiver"
+
+messages:
+  prefix: "&6[QQR] &r"
+  
+  # Chat
+  registered-sender: "&aRegistered SENDER (Freq: %frequency%)"
+  registered-receiver: "&aRegistered RECEIVER (Freq: %frequency%)"
+  registered-sender-power: "&aRegistered SENDER (Freq: %frequency%, Power: %power%)"
+  registered-receiver-power: "&aRegistered RECEIVER (Freq: %frequency%, Power: %power%)"
+  
+  # ActionBar example
+  device-removed: "actionbar! &cWireless device removed!"
+  world-denied: "actionbar! &cYou can't use QQRedstone in world %world%!"
+  
+  # Title example
+  no-permission-region: "title! &cNo Access|&7You can't build in this region"
+  region-denied: "title! &cQQRedstone Disabled|&7Transmitters are forbidden here"
+  
+  # Chat
+  plugin-enabled: "&aQQRedstone is now active! Ready to transmit."
+  no-permission-mechanism: "&cYou don't have permission for this mechanism!"
+  already-owned: "&cThis device belongs to another player!"
+  wrong-mechanism: "&cThis block is not a wireless mechanism!"
+  region-denied-sender: "&cSenders are disabled in this region!"
+  region-denied-receiver: "&cReceivers are disabled in this region!"
+  power-limited: "&ePower limited! Max: %max%, Book: %book%"

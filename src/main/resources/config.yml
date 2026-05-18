@@ -1,0 +1,75 @@
+language: "ru"
+
+# Тип механизма для беспроводной связи
+# Можно указать конкретный тип: LIGHTNING_ROD, BUTTON, LEVER, REDSTONE_TORCH
+# Или ALL — принимать все механизмы сразу
+# Или список: [LEVER, BUTTON] — только рычаги и кнопки
+mechanism:
+  # Принимать любые блоки как механизмы?
+  # Если true — sender/receiver игнорируются, работают все механизмы
+  accept-all: false
+  # Типы для отправителя (если accept-all: false)
+  sender: 
+    - "LEVER"
+    - "BUTTON"
+    - "PRESSURE_PLATE"
+    #- "LIGHTNING_ROD"
+    #- "REDSTONE_TORCH"
+  receiver:
+    - "LEVER"
+    - "BUTTON"
+    - "PRESSURE_PLATE"
+    #- "LIGHTNING_ROD"
+    #- "REDSTONE_TORCH"
+  # Можно указать конкретный материал для кнопок и плит
+  sender-material: ""
+  receiver-material: ""
+  # Нужен ли красный факел сверху для индикации
+  require-torch-indicator: false
+
+# Настройки передачи сигнала
+transmission:
+  # Режим мощности:
+  #   vanilla - только ванильная (редстоун/повторитель)
+  #   book    - только из книги (страница 2)
+  #   both    - можно и так и так (берётся максимум)
+  power-mode: "both"  
+  # Максимальная мощность в конфиге (переопределяется правами и WorldGuard)
+  max-power: 15
+  # Разрешить передачу между разными мирами (глобально)
+  # Если false — кросс-мировая связь запрещена для всех
+  # Если true — нужна проверка права qqredstone.crossworld
+  allow-cross-world: true
+  # Кулдаун между срабатываниями (в тиках, 20 тиков = 1 секунда)
+  # 0 = без кулдауна
+  cooldown-ticks: 10
+  # Защита от флуда если cooldown-ticks: 0
+  anti-flood:
+    enabled: false
+    # Максимальное количество срабатываний за указанный период
+    max-triggers: 10
+    # Период в тиках (20 тиков = 1 секунда)
+    period-ticks: 2
+    # На сколько тиков отключать частоту при срабатывании защиты (0 = навсегда до ручного сброса)
+    disable-ticks: 100
+    # Отправлять ли уведомление с координатами при срабатывании
+    notify-admins: true
+
+device-names:
+  sender: "Отправитель"
+  receiver: "Получатель"
+
+messages:
+  prefix: "&6[QQR] &r"
+  registered-sender: "&aЗарегистрирован ОТПРАВИТЕЛЬ (Частота: %frequency%)"
+  registered-receiver: "&aЗарегистрирован ПОЛУЧАТЕЛЬ (Частота: %frequency%)"
+  device-removed: "&cБеспроводное устройство удалено!"
+  plugin-enabled: "&aQQRedstone активен! Готов к передаче сигналов."
+  no-permission-region: "&cВы не можете строить в этом регионе!"
+  no-permission-mechanism: "&cУ вас нет прав на создание этого механизма!"
+  already-owned: "&cЭто устройство принадлежит другому игроку!"
+  wrong-mechanism: "&cЭтот блок не является беспроводным механизмом!"
+  region-denied: "&cИспользование QQRedstone запрещено в этом регионе!"
+  region-denied-sender: "&cСоздание отправителей запрещено в этом регионе!"
+  region-denied-receiver: "&cСоздание получателей запрещено в этом регионе!"
+  power-limited: "&eМощность ограничена! Макс: %max%, в книге: %book%"

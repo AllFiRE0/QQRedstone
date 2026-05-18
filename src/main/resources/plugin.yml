@@ -1,0 +1,153 @@
+name: QQRedstone
+version: '1.0.1'
+main: com.allfire.qqredstone.QQRedstone
+api-version: '1.21'
+load: STARTUP
+authors: [AllFiRE]
+description: Wireless redstone plugin
+website: https://github.com/AllFiRE/QQRedstone
+softdepend: [WorldGuard, WorldEdit, GriefPrevention, Lands]
+
+permissions:
+  qqredstone.use.*:
+    description: "Все права на использование механизмов"
+    default: op
+    children:
+      qqredstone.use.sender: true
+      qqredstone.use.receiver: true
+      qqredstone.use.all: true
+
+  qqredstone.notification:
+    description: "Получать уведомления о срабатывании анти-флуда и других событиях"
+    default: op
+
+  qqredstone.worlds.use.*:
+    description: "Доступ ко всем мирам"
+    default: op
+    children:
+      qqredstone.worlds.use.world: true
+      qqredstone.worlds.use.world_nether: true
+      qqredstone.worlds.use.world_the_end: true
+
+  qqredstone.worlds.use.world:
+    description: "Использовать в обычном мире"
+    default: true
+
+  qqredstone.worlds.use.world_nether:
+    description: "Использовать в аду"
+    default: false
+
+  qqredstone.worlds.use.world_the_end:
+    description: "Использовать в энде"
+    default: false
+
+  qqredstone.crossworld:
+    description: "Передача сигнала между разными мирами"
+    default: op
+  
+  qqredstone.use.sender:
+    description: "Позволяет создавать отправители"
+    default: true
+  
+  qqredstone.use.receiver:
+    description: "Позволяет создавать получатели"
+    default: true
+  
+  qqredstone.use.all:
+    description: "Позволяет создавать и отправители и получатели"
+    default: true
+    children:
+      qqredstone.use.sender: true
+      qqredstone.use.receiver: true
+  
+  qqredstone.admin.*:
+    description: "Все админские права"
+    default: op
+    children:
+      qqredstone.admin.override: true
+      qqredstone.admin.region.bypass: true
+      qqredstone.admin.reload: true
+  
+  qqredstone.admin.override:
+    description: "Позволяет перезаписывать чужие механизмы"
+    default: op
+  
+  qqredstone.admin.region.bypass:
+    description: "Позволяет использовать механизмы в регионах с запретом QQRedstone"
+    default: op
+  
+  qqredstone.admin.reload:
+    description: "Позволяет перезагружать конфиг плагина"
+    default: op
+  
+  qqredstone.power.*:
+    description: "Все права на мощность сигнала"
+    default: op
+    children:
+      qqredstone.power.1: true
+      qqredstone.power.2: true
+      qqredstone.power.3: true
+      qqredstone.power.4: true
+      qqredstone.power.5: true
+      qqredstone.power.6: true
+      qqredstone.power.7: true
+      qqredstone.power.8: true
+      qqredstone.power.9: true
+      qqredstone.power.10: true
+      qqredstone.power.11: true
+      qqredstone.power.12: true
+      qqredstone.power.13: true
+      qqredstone.power.14: true
+      qqredstone.power.15: true
+  
+  qqredstone.power.1:
+    description: "Максимальная мощность сигнала 1"
+    default: true
+  qqredstone.power.2:
+    description: "Максимальная мощность сигнала 2"
+    default: true
+  qqredstone.power.3:
+    description: "Максимальная мощность сигнала 3"
+    default: true
+  qqredstone.power.4:
+    description: "Максимальная мощность сигнала 4"
+    default: true
+  qqredstone.power.5:
+    description: "Максимальная мощность сигнала 5"
+    default: true
+  qqredstone.power.6:
+    description: "Максимальная мощность сигнала 6"
+    default: true
+  qqredstone.power.7:
+    description: "Максимальная мощность сигнала 7"
+    default: true
+  qqredstone.power.8:
+    description: "Максимальная мощность сигнала 8"
+    default: true
+  qqredstone.power.9:
+    description: "Максимальная мощность сигнала 9"
+    default: true
+  qqredstone.power.10:
+    description: "Максимальная мощность сигнала 10"
+    default: true
+  qqredstone.power.11:
+    description: "Максимальная мощность сигнала 11"
+    default: true
+  qqredstone.power.12:
+    description: "Максимальная мощность сигнала 12"
+    default: true
+  qqredstone.power.13:
+    description: "Максимальная мощность сигнала 13"
+    default: true
+  qqredstone.power.14:
+    description: "Максимальная мощность сигнала 14"
+    default: true
+  qqredstone.power.15:
+    description: "Максимальная мощность сигнала 15"
+    default: true
+
+commands:
+  qqredstone:
+    description: "QQRedstone admin command"
+    usage: "/qqredstone reload"
+    aliases: [qqr]
