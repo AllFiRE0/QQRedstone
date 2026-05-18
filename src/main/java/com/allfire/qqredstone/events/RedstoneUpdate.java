@@ -187,7 +187,6 @@ public class RedstoneUpdate implements Listener {
                 continue;
             }
             
-            // Передаём тип отправителя
             activateReceiver(receiverBlock, isOn, sender.getType());
         }
     }
@@ -200,14 +199,26 @@ public class RedstoneUpdate implements Listener {
             Switch switchData = (Switch) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Кнопка: кнопка повторяет состояние (держится)
+                // Рычаг → Кнопка: кнопка повторяет состояние (держится/отжата)
                 switchData.setPowered(isOn);
                 block.setBlockData(switchData);
             } else {
                 // Кнопка/Плита/Громоотвод → Кнопка: импульс при ЛЮБОМ изменении
                 switchData.setPowered(true);
                 block.setBlockData(switchData);
-                // Ваниль сама отпустит через 15 тиков
+                
+                // Через 15 тиков отжимаем
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    Block currentBlock = block;
+                    if (currentBlock.getType().name().contains("BUTTON") 
+                            && currentBlock.getBlockData() instanceof Switch) {
+                        Switch s = (Switch) currentBlock.getBlockData();
+                        if (s.isPowered()) {
+                            s.setPowered(false);
+                            currentBlock.setBlockData(s);
+                        }
+                    }
+                }, 15L);
             }
             return;
         }
@@ -261,7 +272,6 @@ public class RedstoneUpdate implements Listener {
         }
     }
 
-    // Анти-флуд методы
     private boolean isFreqDisabled(String freq) {
         Long disabledUntil = disabledFreqs.get(freq);
         if (disabledUntil == null) return false;
