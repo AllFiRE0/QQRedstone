@@ -1,16 +1,18 @@
 package com.allfire.qqredstone.events;
 
 import com.allfire.qqredstone.QQRedstone;
+import com.allfire.qqredstone.database.DatabaseManager;
+import com.allfire.qqredstone.database.Mechanism;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.type.LightningRod;
 import org.bukkit.block.data.type.Switch;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -21,93 +23,50 @@ import java.util.*;
 
 public class RedstoneUpdate implements Listener {
 
+    private final QQRedstone plugin;
+    private final DatabaseManager databaseManager;
+    
     private final Map<Location, Integer> poweredSenders = new HashMap<>();
     private final Map<String, Long> lastTransmission = new HashMap<>();
     private final Map<String, Deque<Long>> triggerHistory = new HashMap<>();
     private final Map<String, Long> disabledFreqs = new HashMap<>();
 
+    public RedstoneUpdate(QQRedstone plugin, DatabaseManager databaseManager) {
+        this.plugin = plugin;
+        this.databaseManager = databaseManager;
+    }
+
     @EventHandler
     public void onRedstoneChange(BlockRedstoneEvent event) {
         Block block = event.getBlock();
-        QQRedstone plugin = QQRedstone.getInstance();
-
-        String locStr = getLocString(block);
-
-        ConfigurationSection data = plugin.getConfig().getConfigurationSection("data");
-        if (data == null) return;
-
-        boolean isSender = false;
-        String senderFreq = null;
-        for (String freq : data.getKeys(false)) {
-            if (plugin.getConfig().getStringList("data." + freq + ".senders").contains(locStr)) {
-                isSender = true;
-                senderFreq = freq;
-                break;
-            }
-        }
-
-        if (!isSender) return;
-
-        // Проверяем, существует ли ещё механизм
-        if (!validateMechanism(block, "sender")) {
-            removeFromConfigSilent(locStr);
-            return;
-        }
-
-        if (isFreqDisabled(senderFreq)) return;
-        if (isOnCooldown(senderFreq)) return;
-        if (!checkAntiFlood(senderFreq, block)) return;
-
-        // Определяем мощность в зависимости от типа механизма
-        int power = getMechanismPower(block);
-
-        Location loc = block.getLocation();
-        boolean isPoweredNow = (power > 0);
-
-        if (isPoweredNow && !poweredSenders.containsKey(loc)) {
-            poweredSenders.put(loc, power);
-            processSignal(block, power, true, senderFreq);
-        } else if (isPoweredNow && poweredSenders.containsKey(loc)) {
-            int oldPower = poweredSenders.get(loc);
-            if (oldPower != power) {
-                poweredSenders.put(loc, power);
-                processSignal(block, power, true, senderFreq);
-            }
-        } else if (!isPoweredNow && poweredSenders.containsKey(loc)) {
-            poweredSenders.remove(loc);
-            processSignal(block, 0, false, senderFreq);
-        }
+        processBlock(block);
     }
 
     @EventHandler
     public void onBlockPhysics(BlockPhysicsEvent event) {
         Block block = event.getBlock();
-        QQRedstone plugin = QQRedstone.getInstance();
+        processBlock(block);
+    }
 
-        String locStr = getLocString(block);
+    private void processBlock(Block block) {
+        // Проверяем, есть ли отправитель на этом блоке (через кеш)
+        Mechanism sender = databaseManager.getMechanismAt(block);
+        if (sender == null || !sender.getType().equals("sender")) return;
 
-        ConfigurationSection data = plugin.getConfig().getConfigurationSection("data");
-        if (data == null) return;
-
-        String senderFreq = null;
-        for (String freq : data.getKeys(false)) {
-            if (plugin.getConfig().getStringList("data." + freq + ".senders").contains(locStr)) {
-                senderFreq = freq;
-                break;
-            }
-        }
-
-        if (senderFreq == null) return;
-
-        // Проверяем, существует ли ещё механизм
-        if (!validateMechanism(block, "sender")) {
-            removeFromConfigSilent(locStr);
+        // НОВОЕ: Проверяем, не заменили ли блок под механизмом
+        if (!validateAttachedBlock(sender, block)) {
+            databaseManager.removeMechanism(sender.getWorld(), sender.getX(), sender.getY(), sender.getZ());
+            plugin.getLogger().info("Автоочистка: удалён отправитель на " + 
+                    sender.getWorld() + "," + sender.getX() + "," + sender.getY() + "," + sender.getZ() +
+                    " (блок под ним изменился)");
             return;
         }
 
-        if (isFreqDisabled(senderFreq)) return;
-        if (isOnCooldown(senderFreq)) return;
-        if (!checkAntiFlood(senderFreq, block)) return;
+        String freq = sender.getFrequency();
+
+        if (isFreqDisabled(freq)) return;
+        if (isOnCooldown(freq)) return;
+        if (!checkAntiFlood(freq, block)) return;
 
         int power = getMechanismPower(block);
         Location loc = block.getLocation();
@@ -115,143 +74,185 @@ public class RedstoneUpdate implements Listener {
 
         if (isPoweredNow && !poweredSenders.containsKey(loc)) {
             poweredSenders.put(loc, power);
-            processSignal(block, power, true, senderFreq);
+            processSignal(block, power, true, freq, sender);
         } else if (isPoweredNow && poweredSenders.containsKey(loc)) {
             int oldPower = poweredSenders.get(loc);
             if (oldPower != power) {
                 poweredSenders.put(loc, power);
-                processSignal(block, power, true, senderFreq);
+                processSignal(block, power, true, freq, sender);
             }
         } else if (!isPoweredNow && poweredSenders.containsKey(loc)) {
             poweredSenders.remove(loc);
-            processSignal(block, 0, false, senderFreq);
+            processSignal(block, 0, false, freq, sender);
         }
     }
 
     /**
-     * Определяет мощность механизма в зависимости от его типа
+     * НОВЫЙ МЕТОД: Проверяет, не изменился ли блок под механизмом
      */
+    private boolean validateAttachedBlock(Mechanism mechanism, Block mechanismBlock) {
+        if (mechanism.getAttachedFace() == null) return true;
+        
+        BlockFace face = mechanism.getAttachedBlockFace();
+        Block attachedBlock = mechanismBlock.getRelative(face);
+        
+        // Получаем сохранённый тип блока
+        String savedType = mechanism.getAttachedType();
+        String currentType = attachedBlock.getType().name();
+        
+        // Если тип изменился — механизм больше не валиден
+        if (!savedType.equals(currentType)) {
+            return false;
+        }
+        
+        // Для плит дополнительно проверяем блок снизу
+        if (mechanism.getBelowWorld() != null) {
+            Block belowBlock = mechanismBlock.getRelative(BlockFace.DOWN);
+            String savedBelowType = mechanism.getBelowType();
+            String currentBelowType = belowBlock.getType().name();
+            if (!savedBelowType.equals(currentBelowType)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
     private int getMechanismPower(Block block) {
         String type = block.getType().name();
 
-        // Рычаг — проверяем состояние Switch
-        if (type.equals("LEVER")) {
+        if (type.equals("LEVER") || type.contains("BUTTON")) {
             if (block.getBlockData() instanceof Switch) {
                 return ((Switch) block.getBlockData()).isPowered() ? 15 : 0;
             }
         }
 
-        // Кнопка — проверяем состояние Switch
-        if (type.contains("BUTTON")) {
-            if (block.getBlockData() instanceof Switch) {
-                return ((Switch) block.getBlockData()).isPowered() ? 15 : 0;
-            }
-        }
-
-        // Нажимная плита — проверяем через getBlockPower
         if (type.contains("PRESSURE_PLATE")) {
             return block.getBlockPower(BlockFace.UP) > 0 ? 15 : 0;
         }
 
-        // Громоотвод / редстоун-факел — проверяем редстоун-сигнал
         return getMaxRedstonePower(block);
     }
 
-    /**
-     * Проверяет, существует ли механизм на месте
-     */
-    /**
-     * Проверяет, существует ли механизм на месте
-     * Принимает любой механизм, не только конкретный тип из конфига
-     */
-    private boolean validateMechanism(Block block, String role) {
-        String type = block.getType().name();
+    private int getMaxRedstonePower(Block block) {
+        int maxPower = 0;
+        for (BlockFace face : BlockFace.values()) {
+            int power = block.getBlockPower(face);
+            if (power > maxPower) maxPower = power;
+        }
+        return Math.min(maxPower, 15);
+    }
+
+    private void processSignal(Block block, int vanillaPower, boolean isOn, String freq, Mechanism sender) {
+        String powerMode = plugin.getConfig().getString("transmission.power-mode", "vanilla");
         
-        // AIR — точно сломан
-        if (block.getType().isAir()) return false;
+        int finalPower = 0;
+        int bookPower = sender.getBookPower();
 
-        // Любой механизм считается валидным (рычаг, кнопка, плита, громоотвод, факел)
-        if (type.equals("LEVER")) return true;
-        if (type.contains("BUTTON")) return true;
-        if (type.contains("PRESSURE_PLATE")) return true;
-        if (type.contains("LIGHTNING_ROD")) return true;
-        if (type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH")) return true;
-
-        // Блок есть, но это не механизм (поставили землю вместо рычага)
-        return false;
-    }
-
-    /**
-     * Получает список разрешённых типов механизмов для роли
-     */
-    private List<String> getMechanismTypes(String role) {
-        QQRedstone plugin = QQRedstone.getInstance();
-
-        if (plugin.getConfig().getBoolean("mechanism.accept-all", false)) {
-            return Arrays.asList("LEVER", "BUTTON", "PRESSURE_PLATE", "LIGHTNING_ROD", "REDSTONE_TORCH");
+        switch (powerMode) {
+            case "vanilla":
+                finalPower = vanillaPower;
+                break;
+            case "book":
+                finalPower = (bookPower > 0) ? bookPower : vanillaPower;
+                break;
+            case "both":
+                finalPower = Math.max(vanillaPower, bookPower);
+                break;
+            default:
+                finalPower = vanillaPower;
         }
 
-        List<String> types = plugin.getConfig().getStringList("mechanism." + role);
-        if (types == null || types.isEmpty()) {
-            String single = plugin.getConfig().getString("mechanism." + role, "LIGHTNING_ROD");
-            types = new ArrayList<>();
-            types.add(single);
-        }
+        int configMaxPower = plugin.getConfig().getInt("transmission.max-power", 15);
+        finalPower = Math.min(finalPower, configMaxPower);
 
-        return types;
-    }
+        // НОВОЕ: Берём получателей из кеша
+        List<Mechanism> receivers = databaseManager.getReceiversForFrequency(freq);
+        
+        boolean crossWorldEnabled = plugin.getConfig().getBoolean("transmission.allow-cross-world", true);
 
-    /**
-     * Тихое удаление из конфига
-     */
-    private void removeFromConfigSilent(String locStr) {
-        QQRedstone plugin = QQRedstone.getInstance();
-        ConfigurationSection data = plugin.getConfig().getConfigurationSection("data");
-        if (data == null) return;
-
-        boolean changed = false;
-
-        for (String freq : data.getKeys(false)) {
-            List<String> senders = plugin.getConfig().getStringList("data." + freq + ".senders");
-            List<String> receivers = plugin.getConfig().getStringList("data." + freq + ".receivers");
-
-            if (senders.remove(locStr)) {
-                plugin.getConfig().set("data." + freq + ".senders", senders);
-                changed = true;
+        for (Mechanism receiver : receivers) {
+            // Проверка кросс-мира
+            if (!receiver.getWorld().equals(block.getWorld().getName())) {
+                if (!crossWorldEnabled) continue;
+                
+                // Проверка права у владельца
+                org.bukkit.OfflinePlayer owner = Bukkit.getOfflinePlayer(UUID.fromString(receiver.getOwnerUuid()));
+                if (owner.isOnline() && owner.getPlayer() != null) {
+                    if (!owner.getPlayer().hasPermission("qqredstone.crossworld")
+                            && !owner.getPlayer().hasPermission("qqredstone.admin.region.bypass")) {
+                        continue;
+                    }
+                }
             }
-            if (receivers.remove(locStr)) {
-                plugin.getConfig().set("data." + freq + ".receivers", receivers);
-                changed = true;
+            
+            Location loc = new Location(Bukkit.getWorld(receiver.getWorld()),
+                receiver.getX(), receiver.getY(), receiver.getZ());
+            Block receiverBlock = loc.getBlock();
+            
+            // Проверяем, существует ли ещё получатель (блок под ним не заменили)
+            if (!validateAttachedBlock(receiver, receiverBlock)) {
+                databaseManager.removeMechanism(receiver.getWorld(), receiver.getX(), receiver.getY(), receiver.getZ());
+                plugin.getLogger().info("Автоочистка: удалён получатель на " + 
+                        receiver.getWorld() + "," + receiver.getX() + "," + receiver.getY() + "," + receiver.getZ() +
+                        " (блок под ним изменился)");
+                continue;
             }
-        }
-
-        String ownerKey = "ownership." + locStr.replace(",", ".");
-        if (plugin.getConfig().contains(ownerKey)) {
-            plugin.getConfig().set(ownerKey, null);
-            changed = true;
-        }
-
-        String powerKey = "book-power." + locStr.replace(",", ".");
-        if (plugin.getConfig().contains(powerKey)) {
-            plugin.getConfig().set(powerKey, null);
-            changed = true;
-        }
-
-        for (String freq : data.getKeys(false)) {
-            List<String> senders = plugin.getConfig().getStringList("data." + freq + ".senders");
-            List<String> receivers = plugin.getConfig().getStringList("data." + freq + ".receivers");
-            if (senders.isEmpty() && receivers.isEmpty()) {
-                plugin.getConfig().set("data." + freq, null);
-                changed = true;
-            }
-        }
-
-        if (changed) {
-            plugin.saveConfig();
-            plugin.getLogger().info("[QQR] Автоочистка: удалён несуществующий механизм " + locStr);
+            
+            activateReceiver(receiverBlock, isOn);
         }
     }
 
+    private void activateReceiver(Block block, boolean isOn) {
+        String type = block.getType().name();
+
+        // Рычаг — переключаем только при включении
+        if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
+            if (isOn) {
+                Switch switchData = (Switch) block.getBlockData();
+                switchData.setPowered(!switchData.isPowered());
+                block.setBlockData(switchData);
+            }
+            return;
+        }
+
+        // Кнопка — повторяет состояние
+        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch) {
+            Switch switchData = (Switch) block.getBlockData();
+            switchData.setPowered(isOn);
+            block.setBlockData(switchData);
+            return;
+        }
+
+        // Громоотвод — повторяет состояние
+        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
+            LightningRod rodData = (LightningRod) block.getBlockData();
+            rodData.setPowered(isOn);
+            block.setBlockData(rodData);
+            return;
+        }
+
+        // Нажимная плита — повторяет состояние
+        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+            org.bukkit.block.data.Powerable powerable = (org.bukkit.block.data.Powerable) block.getBlockData();
+            powerable.setPowered(isOn);
+            block.setBlockData(powerable);
+            return;
+        }
+
+        // Редстоун-факел — переключаем только при включении
+        if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
+                && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+            if (isOn) {
+                org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
+                lightable.setLit(!lightable.isLit());
+                block.setBlockData(lightable);
+            }
+            return;
+        }
+    }
+
+    // Анти-флуд методы (остаются без изменений)
     private boolean isFreqDisabled(String freq) {
         Long disabledUntil = disabledFreqs.get(freq);
         if (disabledUntil == null) return false;
@@ -263,7 +264,6 @@ public class RedstoneUpdate implements Listener {
     }
 
     private boolean checkAntiFlood(String freq, Block block) {
-        QQRedstone plugin = QQRedstone.getInstance();
         boolean enabled = plugin.getConfig().getBoolean("transmission.anti-flood.enabled", false);
         if (!enabled) return true;
 
@@ -295,26 +295,14 @@ public class RedstoneUpdate implements Listener {
             disabledFreqs.put(freq, disableUntil);
             history.clear();
 
-            int x = block.getX();
-            int y = block.getY();
-            int z = block.getZ();
-            String world = block.getWorld().getName();
-
             plugin.getLogger().warning("[QQR] Анти-флуд заблокировал частоту " + freq +
-                "! " + world + " " + x + " " + y + " " + z + " | На " + disableTimeStr);
+                "! " + block.getWorld().getName() + " " + block.getX() + " " + block.getY() + " " + block.getZ());
 
             if (notifyAdmins) {
-                String adminMsg = ChatColor.translateAlternateColorCodes('&',
-                    "&c[QQR] &eОбнаружен быстрый механизм! &7(частота &6" + freq +
-                    "&7, &b" + world + "&7, &a" + x + " " + y + " " + z +
-                    "&7) &eЗаблокировано на &c" + disableTimeStr);
-
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     if (player.hasPermission("qqredstone.notification") || player.isOp()) {
-                        player.sendMessage(adminMsg);
-                        player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
-                            TextComponent.fromLegacyText(ChatColor.translateAlternateColorCodes('&',
-                                "&c⚡ Анти-флуд! Частота &6" + freq + " &cзаблокирована")));
+                        player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                            "&c[QQR] &eАнти-флуд: частота &6" + freq + " &cзаблокирована на " + disableTimeStr));
                     }
                 }
             }
@@ -323,10 +311,23 @@ public class RedstoneUpdate implements Listener {
         return true;
     }
 
+    private boolean isOnCooldown(String freq) {
+        long cooldownTicks = plugin.getConfig().getLong("transmission.cooldown-ticks", 0);
+        if (cooldownTicks <= 0) return false;
+
+        long cooldownMs = cooldownTicks * 50;
+        long now = System.currentTimeMillis();
+        Long last = lastTransmission.get(freq);
+
+        if (last != null && (now - last) < cooldownMs) return true;
+
+        lastTransmission.put(freq, now);
+        return false;
+    }
+
     public void resetFreq(String freq) {
         disabledFreqs.remove(freq);
         triggerHistory.remove(freq);
-
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.hasPermission("qqredstone.notification") || player.isOp()) {
                 player.sendMessage(ChatColor.translateAlternateColorCodes('&',
@@ -338,183 +339,11 @@ public class RedstoneUpdate implements Listener {
     public void resetAllFreqs() {
         disabledFreqs.clear();
         triggerHistory.clear();
-
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.hasPermission("qqredstone.notification") || player.isOp()) {
                 player.sendMessage(ChatColor.translateAlternateColorCodes('&',
                     "&a[QQR] &eВсе блокировки частот сброшены."));
             }
         }
-    }
-
-    private boolean isOnCooldown(String freq) {
-        QQRedstone plugin = QQRedstone.getInstance();
-        long cooldownTicks = plugin.getConfig().getLong("transmission.cooldown-ticks", 0);
-        if (cooldownTicks <= 0) return false;
-
-        long cooldownMs = cooldownTicks * 50;
-        long now = System.currentTimeMillis();
-        Long last = lastTransmission.get(freq);
-
-        if (last != null && (now - last) < cooldownMs) return true;
-
-        lastTransmission.put(freq, now);
-
-        if (lastTransmission.size() > 100) {
-            lastTransmission.entrySet().removeIf(entry -> (now - entry.getValue()) > 300000);
-        }
-
-        return false;
-    }
-
-    private int getMaxRedstonePower(Block block) {
-        int maxPower = 0;
-        for (BlockFace face : BlockFace.values()) {
-            int power = block.getBlockPower(face);
-            if (power > maxPower) maxPower = power;
-        }
-        return Math.min(maxPower, 15);
-    }
-
-    private void processSignal(Block block, int vanillaPower, boolean isOn, String freq) {
-        QQRedstone plugin = QQRedstone.getInstance();
-        String powerMode = plugin.getConfig().getString("transmission.power-mode", "vanilla");
-        String locStr = getLocString(block);
-
-        int finalPower = 0;
-        int bookPower = plugin.getConfig().getInt("book-power." + locStr.replace(",", "."), 0);
-
-        switch (powerMode) {
-            case "vanilla":
-                finalPower = vanillaPower;
-                break;
-            case "book":
-                finalPower = (bookPower > 0) ? bookPower : vanillaPower;
-                break;
-            case "both":
-                finalPower = Math.max(vanillaPower, bookPower);
-                break;
-            default:
-                finalPower = vanillaPower;
-        }
-
-        int configMaxPower = plugin.getConfig().getInt("transmission.max-power", 15);
-        finalPower = Math.min(finalPower, configMaxPower);
-
-        updateReceivers(freq, finalPower, isOn, block.getWorld().getName());
-    }
-
-    private void updateReceivers(String freq, int power, boolean isOn, String senderWorld) {
-        QQRedstone plugin = QQRedstone.getInstance();
-        List<String> receivers = plugin.getConfig().getStringList("data." + freq + ".receivers");
-        if (receivers == null) return;
-
-        boolean crossWorldEnabled = plugin.getConfig().getBoolean("transmission.allow-cross-world", true);
-
-        for (String locStr : receivers) {
-            String[] p = locStr.split(",");
-            if (p.length < 4) continue;
-
-            String receiverWorld = p[0];
-
-            if (!senderWorld.equals(receiverWorld)) {
-                if (!crossWorldEnabled) continue;
-
-                String ownerKey = "ownership." + locStr.replace(",", ".");
-                String ownerUuid = plugin.getConfig().getString(ownerKey);
-                if (ownerUuid != null) {
-                    org.bukkit.OfflinePlayer owner = Bukkit.getOfflinePlayer(java.util.UUID.fromString(ownerUuid));
-                    if (owner.isOnline() && owner.getPlayer() != null) {
-                        if (!owner.getPlayer().hasPermission("qqredstone.crossworld")
-                                && !owner.getPlayer().hasPermission("qqredstone.admin.region.bypass")) {
-                            continue;
-                        }
-                    }
-                }
-            }
-
-            Location loc = new Location(Bukkit.getWorld(p[0]),
-                Double.parseDouble(p[1]),
-                Double.parseDouble(p[2]),
-                Double.parseDouble(p[3]));
-            Block block = loc.getBlock();
-
-            // Проверяем получатель — если сломан, удаляем
-            if (!validateMechanism(block, "receiver")) {
-                removeFromConfigSilent(locStr);
-                continue;
-            }
-
-            // Активируем получатель в зависимости от его типа
-            activateReceiver(block, isOn);
-        }
-    }
-
-    /**
-     * Активирует/деактивирует получатель в зависимости от его типа
-     * 
-     * Логика:
-     * - Рычаг: переключается (toggle) только при isOn=true (передний фронт)
-     * - Кнопка: повторяет состояние отправителя (isOn)
-     * - Плита: повторяет состояние отправителя (isOn)
-     * - Громоотвод: повторяет состояние отправителя (isOn)
-     * - Факел: переключается (toggle) только при isOn=true (передний фронт)
-     */
-    private void activateReceiver(Block block, boolean isOn) {
-        String type = block.getType().name();
-
-        // Рычаг — переключаем только при включении (передний фронт)
-        if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
-            if (isOn) { // Только при нажатии, не при отпускании
-                Switch switchData = (Switch) block.getBlockData();
-                boolean currentState = switchData.isPowered();
-                switchData.setPowered(!currentState);
-                block.setBlockData(switchData);
-            }
-            return;
-        }
-
-        // Кнопка — повторяет состояние
-        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch) {
-            Switch switchData = (Switch) block.getBlockData();
-            switchData.setPowered(isOn);
-            block.setBlockData(switchData);
-            return;
-        }
-
-        // Громоотвод — повторяет состояние
-        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
-            LightningRod rodData = (LightningRod) block.getBlockData();
-            rodData.setPowered(isOn);
-            block.setBlockData(rodData);
-            return;
-        }
-
-        // Нажимная плита — повторяет состояние
-        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
-            org.bukkit.block.data.Powerable powerable = (org.bukkit.block.data.Powerable) block.getBlockData();
-            powerable.setPowered(isOn);
-            block.setBlockData(powerable);
-            return;
-        }
-
-        // Редстоун-факел — переключаем только при включении (передний фронт)
-        if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
-                && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-            if (isOn) { // Только при нажатии
-                org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
-                boolean currentLit = lightable.isLit();
-                lightable.setLit(!currentLit);
-                block.setBlockData(lightable);
-            }
-            return;
-        }
-    }
-
-    private String getLocString(Block block) {
-        return block.getWorld().getName() + ","
-            + block.getX() + ","
-            + block.getY() + ","
-            + block.getZ();
     }
 }
