@@ -224,25 +224,15 @@ public class RedstoneUpdate implements Listener {
             return;
         }
 
-вариант два подойдет сюда?
         // ===== РЫЧАГ-ПОЛУЧАТЕЛЬ =====
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
             Switch switchData = (Switch) block.getBlockData();
             
             if (senderType.equals("BUTTON")) {
-                Location loc = block.getLocation();
-                
+                // Кнопка → Рычаг: переключение только при нажатии
                 if (isOn) {
-                    // Нажатие кнопки - переключаем рычаг
-                    boolean newState = !switchData.isPowered();
-                    switchData.setPowered(newState);
+                    switchData.setPowered(!switchData.isPowered());
                     block.setBlockData(switchData);
-                    buttonPressProcessed.put(loc, true);
-                } else {
-                    // Отпускание кнопки - игнорируем, если уже обработали нажатие
-                    if (buttonPressProcessed.remove(loc) != null) {
-                        return;
-                    }
                 }
             } else {
                 // Рычаг/Плита/Громоотвод/Факел → Рычаг: повторяет состояние
