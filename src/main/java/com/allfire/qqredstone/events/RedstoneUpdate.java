@@ -200,15 +200,12 @@ public class RedstoneUpdate implements Listener {
             Switch switchData = (Switch) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Кнопка: повторяет состояние (держится)
                 switchData.setPowered(isOn);
                 block.setBlockData(switchData);
             } else {
-                // Кнопка/Плита/Громоотвод/Факел → Кнопка: импульс ТОЛЬКО при включении
                 if (isOn) {
                     switchData.setPowered(true);
                     block.setBlockData(switchData);
-                    // Отпускаем через 15 тиков
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
                         Block b = block;
                         if (b.getType().name().contains("BUTTON") && b.getBlockData() instanceof Switch) {
@@ -225,21 +222,12 @@ public class RedstoneUpdate implements Listener {
         }
 
         // ===== РЫЧАГ-ПОЛУЧАТЕЛЬ =====
+        // КАК В СТАРОМ ФАЙЛЕ - БЕЗ ВСЯКИХ senderType
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
-            Switch switchData = (Switch) block.getBlockData();
-            
-            if (senderType.equals("BUTTON")) {
-                // Кнопка → Рычаг: переключение только при нажатии
-                if (isOn) {
-                    switchData.setPowered(!switchData.isPowered());
-                    block.setBlockData(switchData);
-                }
-            } else {
-                // Рычаг/Плита/Громоотвод/Факел → Рычаг: повторяет состояние
-                if (switchData.isPowered() != isOn) {
-                    switchData.setPowered(isOn);
-                    block.setBlockData(switchData);
-                }
+            if (isOn) {
+                Switch switchData = (Switch) block.getBlockData();
+                switchData.setPowered(!switchData.isPowered());
+                block.setBlockData(switchData);
             }
             return;
         }
@@ -249,11 +237,9 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Powerable powerable = (org.bukkit.block.data.Powerable) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Плита: повторяет состояние (держится)
                 powerable.setPowered(isOn);
                 block.setBlockData(powerable);
             } else {
-                // Кнопка/Плита/Громоотвод/Факел → Плита: импульс ТОЛЬКО при включении
                 if (isOn) {
                     powerable.setPowered(true);
                     block.setBlockData(powerable);
@@ -280,7 +266,6 @@ public class RedstoneUpdate implements Listener {
                 rodData.setPowered(isOn);
                 block.setBlockData(rodData);
             } else {
-                // Кнопка/Плита/Громоотвод/Факел → Громоотвод: импульс ТОЛЬКО при включении
                 if (isOn) {
                     rodData.setPowered(true);
                     block.setBlockData(rodData);
@@ -305,11 +290,9 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Факел: инверсия
                 lightable.setLit(!isOn);
                 block.setBlockData(lightable);
             } else {
-                // Кнопка/Плита/Громоотвод/Факел → Факел: импульс (мигание) ТОЛЬКО при включении
                 if (isOn) {
                     boolean current = lightable.isLit();
                     lightable.setLit(!current);
