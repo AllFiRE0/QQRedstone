@@ -30,6 +30,7 @@ public class RedstoneUpdate implements Listener {
     private final Map<String, Long> lastTransmission = new HashMap<>();
     private final Map<String, Deque<Long>> triggerHistory = new HashMap<>();
     private final Map<String, Long> disabledFreqs = new HashMap<>();
+    private final Map<Location, Boolean> buttonPressProcessed = new HashMap<>();
 
     public RedstoneUpdate(QQRedstone plugin, DatabaseManager databaseManager) {
         this.plugin = plugin;
@@ -226,12 +227,21 @@ public class RedstoneUpdate implements Listener {
         // ===== РЫЧАГ-ПОЛУЧАТЕЛЬ =====
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
             Switch switchData = (Switch) block.getBlockData();
-            
+        
             if (senderType.equals("BUTTON")) {
-                // Кнопка → Рычаг: переключение при каждом нажатии
+                Location loc = block.getLocation();
+            
                 if (isOn) {
-                    switchData.setPowered(!switchData.isPowered());
+                    // Нажатие кнопки - переключаем рычаг
+                    boolean newState = !switchData.isPowered();
+                    switchData.setPowered(newState);
                     block.setBlockData(switchData);
+                    buttonPressProcessed.put(loc, true);
+                } else {
+                    // Отпускание кнопки - игнорируем, если уже обработали нажатие
+                    if (buttonPressProcessed.remove(loc) != null) {
+                        return;
+                    }
                 }
             } else {
                 // Рычаг/Плита/Громоотвод/Факел → Рычаг: повторяет состояние
