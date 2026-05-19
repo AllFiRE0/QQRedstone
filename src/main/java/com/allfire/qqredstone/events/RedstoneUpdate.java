@@ -227,10 +227,10 @@ public class RedstoneUpdate implements Listener {
         // ===== РЫЧАГ-ПОЛУЧАТЕЛЬ =====
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
             Switch switchData = (Switch) block.getBlockData();
-        
+            
             if (senderType.equals("BUTTON")) {
                 Location loc = block.getLocation();
-            
+                
                 if (isOn) {
                     // Нажатие кнопки - переключаем рычаг
                     boolean newState = !switchData.isPowered();
