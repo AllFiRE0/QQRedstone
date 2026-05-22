@@ -1,0 +1,33 @@
+device-names:
+  sender: "Sender"
+  receiver: "Empfänger"
+
+messages:
+  prefix: "&6[QQR] &r"
+  
+  # Chat
+  registered-sender: "&aSender registriert (Frequenz: %frequency%)"
+  registered-receiver: "&aEmpfänger registriert (Frequenz: %frequency%)"
+  registered-sender-power: "&aSender registriert (Frequenz: %frequency%, Stärke: %power%)"
+  registered-receiver-power: "&aEmpfänger registriert (Frequenz: %frequency%, Stärke: %power%)"
+  device-removed: "&cDrahtloses Gerät entfernt!"
+  device-overwritten: "&eGerät auf diesem Block wurde überschrieben!"
+  
+  # ActionBar
+  device-removed: "actionbar! &cDrahtloses Gerät entfernt!"
+  world-denied: "actionbar! &cDu kannst QQRedstone in Welt %world% nicht verwenden!"
+  
+  # Title
+  no-permission-region: "title! &cKeine Zugriffsrechte|&7Du darfst in dieser Region nicht bauen"
+  region-denied: "title! &cQQRedstone verboten|&7Sender sind hier nicht erlaubt"
+  
+  # Chat
+  plugin-enabled: "&aQQRedstone ist aktiv! Bereit zur Signalübertragung."
+  no-permission-region: "&cDu darfst in dieser Region nicht bauen!"
+  no-permission-mechanism: "&cDu hast keine Berechtigung für diesen Mechanismus!"
+  already-owned: "&cDieses Gerät gehört einem anderen Spieler!"
+  wrong-mechanism: "&cDieser Block ist kein drahtloser Mechanismus!"
+  region-denied: "&cDie Nutzung von QQRedstone ist in dieser Region verboten!"
+  region-denied-sender: "&cDas Erstellen von Sendern ist in dieser Region verboten!"
+  region-denied-receiver: "&cDas Erstellen von Empfängern ist in dieser Region verboten!"
+  power-limited: "&eSignalstärke begrenzt! Max: %max%, Buch: %book%"
