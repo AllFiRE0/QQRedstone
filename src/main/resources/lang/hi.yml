@@ -1,0 +1,41 @@
+device-names:
+  sender:
+    - "प्रेषक"
+    - "ट्रांसमीटर"
+    - "स्रोत"
+    - "उत्सर्जक"
+  receiver:
+    - "रिसीवर"
+    - "एक्ट्यूएटर"
+    - "लक्ष्य"
+    - "रिसेप्टर"
+  remover:
+    - "हटाने वाला"
+    - "हटाएं"
+    - "मिटाएं"
+    - "साफ़ करने वाला"
+
+messages:
+  prefix: "&6[QQR] &r"
+  
+  registered-sender: "&aप्रेषक पंजीकृत (आवृत्ति: %frequency%)"
+  registered-receiver: "&aरिसीवर पंजीकृत (आवृत्ति: %frequency%)"
+  registered-sender-power: "&aप्रेषक पंजीकृत (आवृत्ति: %frequency%, शक्ति: %power%)"
+  registered-receiver-power: "&aरिसीवर पंजीकृत (आवृत्ति: %frequency%, शक्ति: %power%)"
+  
+  device-removed: "actionbar! &cवायरलेस उपकरण हटा दिया गया!"
+  device-overwritten: "&eइस ब्लॉक पर उपकरण अधिलेखित कर दिया गया है!"
+  no-device-at-block: "&cइस ब्लॉक पर कोई उपकरण नहीं है!"
+  
+  world-denied: "actionbar! &cआप %world% दुनिया में QQRedstone का उपयोग नहीं कर सकते!"
+  
+  no-permission-region: "title! &cपहुंच नहीं है|&7आप इस क्षेत्र में निर्माण नहीं कर सकते"
+  region-denied: "title! &cQQRedstone अक्षम|&7इस क्षेत्र में ट्रांसमीटर निषिद्ध हैं"
+  
+  plugin-enabled: "&aQQRedstone सक्रिय है! सिग्नल संचारित करने के लिए तैयार."
+  no-permission-mechanism: "&cआपके पास इस तंत्र की अनुमति नहीं है!"
+  already-owned: "&cयह उपकरण किसी अन्य खिलाड़ी का है!"
+  wrong-mechanism: "&cयह ब्लॉक वायरलेस तंत्र नहीं है!"
+  region-denied-sender: "&cइस क्षेत्र में प्रेषक बनाना प्रतिबंधित है!"
+  region-denied-receiver: "&cइस क्षेत्र में रिसीवर बनाना प्रतिबंधित है!"
+  power-limited: "&eशक्ति सीमित! अधिकतम: %max%, पुस्तक: %book%"
