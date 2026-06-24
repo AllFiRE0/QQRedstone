@@ -22,12 +22,16 @@ messages:
   registered-receiver: "&aЗарегистрирован ПОЛУЧАТЕЛЬ (Частота: %frequency%)"
   registered-sender-power: "&aЗарегистрирован ОТПРАВИТЕЛЬ (Частота: %frequency%, Мощность: %power%)"
   registered-receiver-power: "&aЗарегистрирован ПОЛУЧАТЕЛЬ (Частота: %frequency%, Мощность: %power%)"
+  
   device-removed: "actionbar! &cБеспроводное устройство удалено!"
   device-overwritten: "&eУстройство на этом блоке перезаписано!"
   no-device-at-block: "&cНа этом блоке нет механизма!"
+  
   world-denied: "actionbar! &cВы не можете использовать беспроводные механизмы в мире %world%!"
+  
   no-permission-region: "title! &cНет доступа|&7Вы не можете строить в этом регионе"
   region-denied: "title! &cQQRedstone запрещён|&7В этом регионе запрещены передатчики"
+  
   plugin-enabled: "&aQQRedstone активен! Готов к передаче сигналов."
   no-permission-mechanism: "&cУ вас нет прав на создание этого механизма!"
   already-owned: "&cЭто устройство принадлежит другому игроку!"
