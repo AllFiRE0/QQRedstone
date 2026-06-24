@@ -1,0 +1,41 @@
+device-names:
+  sender:
+    - "送信機"
+    - "トランスミッター"
+    - "ソース"
+    - "エミッター"
+  receiver:
+    - "受信機"
+    - "アクチュエーター"
+    - "ターゲット"
+    - "レセプター"
+  remover:
+    - "削除機"
+    - "削除"
+    - "消去"
+    - "クリーナー"
+
+messages:
+  prefix: "&6[QQR] &r"
+  
+  registered-sender: "&a送信機を登録しました (周波数: %frequency%)"
+  registered-receiver: "&a受信機を登録しました (周波数: %frequency%)"
+  registered-sender-power: "&a送信機を登録しました (周波数: %frequency%, 出力: %power%)"
+  registered-receiver-power: "&a受信機を登録しました (周波数: %frequency%, 出力: %power%)"
+  
+  device-removed: "actionbar! &cワイヤレスデバイスを削除しました!"
+  device-overwritten: "&eこのブロックのデバイスは上書きされました!"
+  no-device-at-block: "&cこのブロックにデバイスはありません!"
+  
+  world-denied: "actionbar! &cワールド %world% で QQRedstone を使用できません!"
+  
+  no-permission-region: "title! &cアクセス権限なし|&7このリージョンで建設できません"
+  region-denied: "title! &cQQRedstone 無効|&7このリージョンでは送信機は禁止されています"
+  
+  plugin-enabled: "&aQQRedstone がアクティブになりました! 信号送信の準備完了."
+  no-permission-mechanism: "&cこのメカニズムの権限がありません!"
+  already-owned: "&cこのデバイスは別のプレイヤーに属しています!"
+  wrong-mechanism: "&cこのブロックはワイヤレスメカニズムではありません!"
+  region-denied-sender: "&cこのリージョンでは送信機の作成は禁止されています!"
+  region-denied-receiver: "&cこのリージョンでは受信機の作成は禁止されています!"
+  power-limited: "&e出力が制限されています! 最大: %max%, 本: %book%"
