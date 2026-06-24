@@ -21,12 +21,11 @@ public class BookRename implements Listener {
             return;
 
         QQRedstone plugin = QQRedstone.getInstance();
-        String senderName = plugin.getSenderName();
-        String receiverName = plugin.getReceiverName();
-
+        
         if (meta.hasDisplayName()) {
             String name = meta.getDisplayName();
-            if (name.equalsIgnoreCase(senderName) || name.equalsIgnoreCase(receiverName)) {
+            // Проверяем по ВСЕМ спискам
+            if (plugin.isSenderName(name) || plugin.isReceiverName(name) || plugin.isRemoverName(name)) {
                 meta.setEnchantmentGlintOverride(true);
             } else {
                 meta.setEnchantmentGlintOverride(null);
@@ -47,13 +46,10 @@ public class BookRename implements Listener {
             return;
 
         QQRedstone plugin = QQRedstone.getInstance();
-        String senderName = plugin.getSenderName();
-        String receiverName = plugin.getReceiverName();
 
         if (meta.hasDisplayName()) {
             String name = meta.getDisplayName();
-            if (name.equalsIgnoreCase(senderName) || name.equalsIgnoreCase(receiverName)) {
-                // Сначала проверяем наличие, потом получаем!
+            if (plugin.isSenderName(name) || plugin.isReceiverName(name) || plugin.isRemoverName(name)) {
                 boolean hasGlint = meta.hasEnchantmentGlintOverride();
                 Boolean currentGlint = hasGlint ? meta.getEnchantmentGlintOverride() : null;
                 
