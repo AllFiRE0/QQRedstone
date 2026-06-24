@@ -1,0 +1,41 @@
+device-names:
+  sender:
+    - "Trasmettitore"
+    - "Emettitore"
+    - "Fonte"
+    - "Trasmittente"
+  receiver:
+    - "Ricevitore"
+    - "Attuatore"
+    - "Target"
+    - "Recettore"
+  remover:
+    - "Rimuovitore"
+    - "Elimina"
+    - "Cancella"
+    - "Pulitore"
+
+messages:
+  prefix: "&6[QQR] &r"
+  
+  registered-sender: "&aTrasmettitore registrato (Frequenza: %frequency%)"
+  registered-receiver: "&aRicevitore registrato (Frequenza: %frequency%)"
+  registered-sender-power: "&aTrasmettitore registrato (Frequenza: %frequency%, Potenza: %power%)"
+  registered-receiver-power: "&aRicevitore registrato (Frequenza: %frequency%, Potenza: %power%)"
+  
+  device-removed: "actionbar! &cDispositivo wireless rimosso!"
+  device-overwritten: "&eDispositivo su questo blocco è stato sovrascritto!"
+  no-device-at-block: "&cNessun dispositivo su questo blocco!"
+  
+  world-denied: "actionbar! &cNon puoi usare QQRedstone nel mondo %world%!"
+  
+  no-permission-region: "title! &cNessun accesso|&7Non puoi costruire in questa regione"
+  region-denied: "title! &cQQRedstone disabilitato|&7I trasmettitori sono vietati qui"
+  
+  plugin-enabled: "&aQQRedstone è attivo! Pronto per trasmettere segnali."
+  no-permission-mechanism: "&cNon hai il permesso per questo meccanismo!"
+  already-owned: "&cQuesto dispositivo appartiene a un altro giocatore!"
+  wrong-mechanism: "&cQuesto blocco non è un meccanismo wireless!"
+  region-denied-sender: "&cLa creazione di trasmettitori è vietata in questa regione!"
+  region-denied-receiver: "&cLa creazione di ricevitori è vietata in questa regione!"
+  power-limited: "&ePotenza limitata! Max: %max%, Libro: %book%"
