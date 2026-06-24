@@ -54,18 +54,3 @@ transmission:
     disable-ticks: 100
     # Отправлять ли уведомление с координатами при срабатывании
     notify-admins: true
-
-messages:
-  prefix: "&6[QQR] &r"
-  registered-sender: "&aЗарегистрирован ОТПРАВИТЕЛЬ (Частота: %frequency%)"
-  registered-receiver: "&aЗарегистрирован ПОЛУЧАТЕЛЬ (Частота: %frequency%)"
-  device-removed: "&cБеспроводное устройство удалено!"
-  plugin-enabled: "&aQQRedstone активен! Готов к передаче сигналов."
-  no-permission-region: "&cВы не можете строить в этом регионе!"
-  no-permission-mechanism: "&cУ вас нет прав на создание этого механизма!"
-  already-owned: "&cЭто устройство принадлежит другому игроку!"
-  wrong-mechanism: "&cЭтот блок не является беспроводным механизмом!"
-  region-denied: "&cИспользование QQRedstone запрещено в этом регионе!"
-  region-denied-sender: "&cСоздание отправителей запрещено в этом регионе!"
-  region-denied-receiver: "&cСоздание получателей запрещено в этом регионе!"
-  power-limited: "&eМощность ограничена! Макс: %max%, в книге: %book%"
