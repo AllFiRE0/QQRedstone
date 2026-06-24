@@ -1,0 +1,41 @@
+device-names:
+  sender:
+    - "송신기"
+    - "전송기"
+    - "소스"
+    - "방출기"
+  receiver:
+    - "수신기"
+    - "액추에이터"
+    - "대상"
+    - "수용체"
+  remover:
+    - "제거기"
+    - "삭제"
+    - "지우기"
+    - "클리너"
+
+messages:
+  prefix: "&6[QQR] &r"
+  
+  registered-sender: "&a송신기 등록됨 (주파수: %frequency%)"
+  registered-receiver: "&a수신기 등록됨 (주파수: %frequency%)"
+  registered-sender-power: "&a송신기 등록됨 (주파수: %frequency%, 출력: %power%)"
+  registered-receiver-power: "&a수신기 등록됨 (주파수: %frequency%, 출력: %power%)"
+  
+  device-removed: "actionbar! &c무선 장치 제거됨!"
+  device-overwritten: "&e이 블록의 장치가 덮어쓰기되었습니다!"
+  no-device-at-block: "&c이 블록에 장치가 없습니다!"
+  
+  world-denied: "actionbar! &c%world% 월드에서 QQRedstone을 사용할 수 없습니다!"
+  
+  no-permission-region: "title! &c접근 권한 없음|&7이 지역에서 건설할 수 없습니다"
+  region-denied: "title! &cQQRedstone 비활성화됨|&7이 지역에서는 송신기가 금지됩니다"
+  
+  plugin-enabled: "&aQQRedstone이 활성화되었습니다! 신호 전송 준비 완료."
+  no-permission-mechanism: "&c이 메커니즘에 대한 권한이 없습니다!"
+  already-owned: "&c이 장치는 다른 플레이어에게 속해 있습니다!"
+  wrong-mechanism: "&c이 블록은 무선 메커니즘이 아닙니다!"
+  region-denied-sender: "&c이 지역에서는 송신기 생성이 금지됩니다!"
+  region-denied-receiver: "&c이 지역에서는 수신기 생성이 금지됩니다!"
+  power-limited: "&e출력이 제한됨! 최대: %max%, 책: %book%"
