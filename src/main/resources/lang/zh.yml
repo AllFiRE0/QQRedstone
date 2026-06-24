@@ -1,0 +1,41 @@
+device-names:
+  sender:
+    - "发送器"
+    - "发射器"
+    - "信号源"
+    - "发射机"
+  receiver:
+    - "接收器"
+    - "执行器"
+    - "目标"
+    - "接收机"
+  remover:
+    - "移除器"
+    - "删除"
+    - "擦除"
+    - "清除器"
+
+messages:
+  prefix: "&6[QQR] &r"
+  
+  registered-sender: "&a已注册发送器 (频率: %frequency%)"
+  registered-receiver: "&a已注册接收器 (频率: %frequency%)"
+  registered-sender-power: "&a已注册发送器 (频率: %frequency%, 功率: %power%)"
+  registered-receiver-power: "&a已注册接收器 (频率: %frequency%, 功率: %power%)"
+  
+  device-removed: "actionbar! &c无线设备已移除!"
+  device-overwritten: "&e此方块上的设备已被覆盖!"
+  no-device-at-block: "&c此方块上没有设备!"
+  
+  world-denied: "actionbar! &c你不能在 %world% 世界中使用 QQRedstone!"
+  
+  no-permission-region: "title! &c无权限|&7你不能在此区域建造"
+  region-denied: "title! &cQQRedstone 已禁用|&7此区域禁止使用发射器"
+  
+  plugin-enabled: "&aQQRedstone 已激活! 准备传输信号."
+  no-permission-mechanism: "&c你没有权限创建此机制!"
+  already-owned: "&c此设备属于其他玩家!"
+  wrong-mechanism: "&c此方块不是无线机制!"
+  region-denied-sender: "&c此区域禁止创建发送器!"
+  region-denied-receiver: "&c此区域禁止创建接收器!"
+  power-limited: "&e功率受限! 最大: %max%, 书中: %book%"
