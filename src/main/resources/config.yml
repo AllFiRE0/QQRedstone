@@ -1,4 +1,4 @@
-language: "ru"
+language: "ru"  # или ru, en, de, zh, ja, ko, it, hi, ar, fr
 
 # Тип механизма для беспроводной связи
 # Можно указать конкретный тип: LIGHTNING_ROD, BUTTON, LEVER, REDSTONE_TORCH
