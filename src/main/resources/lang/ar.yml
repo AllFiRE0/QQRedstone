@@ -1,0 +1,41 @@
+device-names:
+  sender:
+    - "مرسل"
+    - "جهاز إرسال"
+    - "مصدر"
+    - "باعث"
+  receiver:
+    - "مستقبل"
+    - "مشغل"
+    - "هدف"
+    - "مستقبل"
+  remover:
+    - "مزيل"
+    - "حذف"
+    - "مسح"
+    - "منظف"
+
+messages:
+  prefix: "&6[QQR] &r"
+  
+  registered-sender: "&aتم تسجيل المرسل (التردد: %frequency%)"
+  registered-receiver: "&aتم تسجيل المستقبل (التردد: %frequency%)"
+  registered-sender-power: "&aتم تسجيل المرسل (التردد: %frequency%, الطاقة: %power%)"
+  registered-receiver-power: "&aتم تسجيل المستقبل (التردد: %frequency%, الطاقة: %power%)"
+  
+  device-removed: "actionbar! &cتم إزالة الجهاز اللاسلكي!"
+  device-overwritten: "&eتم استبدال الجهاز على هذه الكتلة!"
+  no-device-at-block: "&cلا يوجد جهاز على هذه الكتلة!"
+  
+  world-denied: "actionbar! &cلا يمكنك استخدام QQRedstone في عالم %world%!"
+  
+  no-permission-region: "title! &cلا يوجد إذن|&7لا يمكنك البناء في هذه المنطقة"
+  region-denied: "title! &cQQRedstone معطل|&7أجهزة الإرسال محظورة هنا"
+  
+  plugin-enabled: "&aQQRedstone نشط! جاهز لنقل الإشارات."
+  no-permission-mechanism: "&cليس لديك إذن لهذه الآلية!"
+  already-owned: "&cهذا الجهاز يملكه لاعب آخر!"
+  wrong-mechanism: "&cهذه الكتلة ليست آلية لاسلكية!"
+  region-denied-sender: "&cإنشاء المرسلين محظور في هذه المنطقة!"
+  region-denied-receiver: "&cإنشاء المستقبلين محظور في هذه المنطقة!"
+  power-limited: "&eالطاقة محدودة! الحد الأقصى: %max%, الكتاب: %book%"
