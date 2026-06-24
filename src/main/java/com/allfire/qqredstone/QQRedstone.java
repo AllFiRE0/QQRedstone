@@ -19,16 +19,21 @@ import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class QQRedstone extends JavaPlugin {
 
     private static QQRedstone instance;
     private FileConfiguration langConfig;
-    private String senderName;
-    private String receiverName;
     private WorldGuardManager worldGuardManager;
     private WorldGuardUtils worldGuardUtils;
-    private DatabaseManager databaseManager;  // НОВОЕ
+    private DatabaseManager databaseManager;
+    
+    // СПИСКИ названий для разных типов книг
+    private List<String> senderNames = new ArrayList<>();
+    private List<String> receiverNames = new ArrayList<>();
+    private List<String> removerNames = new ArrayList<>();
 
     public static QQRedstone getInstance() {
         return instance;
@@ -52,18 +57,15 @@ public class QQRedstone extends JavaPlugin {
 
         loadLanguage();
 
-        // НОВОЕ: Инициализация SQLite
         databaseManager = new DatabaseManager(this);
         databaseManager.initialize();
 
-        // Инициализация WorldGuard
         worldGuardManager = new WorldGuardManager(this);
         worldGuardManager.initialize();
         worldGuardUtils = new WorldGuardUtils(this);
 
         PluginManager pluginManager = Bukkit.getPluginManager();
         
-        // Передаём DatabaseManager в события
         pluginManager.registerEvents(new PlayerInteract(this, databaseManager), this);
         pluginManager.registerEvents(new RedstoneUpdate(this, databaseManager), this);
         pluginManager.registerEvents(new MechanismBreak(this, databaseManager), this);
@@ -90,10 +92,49 @@ public class QQRedstone extends JavaPlugin {
             saveResource("lang/" + lang + ".yml", false);
         }
         langConfig = YamlConfiguration.loadConfiguration(langFile);
-        senderName = langConfig.getString("device-names.sender", "Sender");
-        receiverName = langConfig.getString("device-names.receiver", "Receiver");
+        
+        // Загружаем СПИСКИ названий
+        senderNames = langConfig.getStringList("device-names.sender");
+        if (senderNames.isEmpty()) senderNames.add("Отправитель");
+        
+        receiverNames = langConfig.getStringList("device-names.receiver");
+        if (receiverNames.isEmpty()) receiverNames.add("Получатель");
+        
+        removerNames = langConfig.getStringList("device-names.remover");
+        if (removerNames.isEmpty()) removerNames.add("Деактиватор");
     }
 
+    // ============================================================
+    // МЕТОДЫ ПРОВЕРКИ НАЗВАНИЙ
+    // ============================================================
+    public boolean isSenderName(String name) {
+        for (String n : senderNames) {
+            if (n.equalsIgnoreCase(name)) return true;
+        }
+        return false;
+    }
+
+    public boolean isReceiverName(String name) {
+        for (String n : receiverNames) {
+            if (n.equalsIgnoreCase(name)) return true;
+        }
+        return false;
+    }
+
+    public boolean isRemoverName(String name) {
+        for (String n : removerNames) {
+            if (n.equalsIgnoreCase(name)) return true;
+        }
+        return false;
+    }
+
+    public List<String> getSenderNames() { return senderNames; }
+    public List<String> getReceiverNames() { return receiverNames; }
+    public List<String> getRemoverNames() { return removerNames; }
+
+    // ============================================================
+    // СТАНДАРТНЫЕ МЕТОДЫ
+    // ============================================================
     public String getMessage(String path) {
         String msg = langConfig.getString("messages." + path, "");
         if (msg.isEmpty()) return "";
@@ -143,10 +184,8 @@ public class QQRedstone extends JavaPlugin {
         sendMessage(player, path, new String[0]);
     }
 
-    public String getSenderName() { return senderName; }
-    public String getReceiverName() { return receiverName; }
     public FileConfiguration getLangConfig() { return langConfig; }
     public WorldGuardManager getWorldGuardManager() { return worldGuardManager; }
     public WorldGuardUtils getWorldGuardUtils() { return worldGuardUtils; }
-    public DatabaseManager getDatabaseManager() { return databaseManager; }  // НОВОЕ
+    public DatabaseManager getDatabaseManager() { return databaseManager; }
 }
