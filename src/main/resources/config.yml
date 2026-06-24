@@ -13,14 +13,14 @@ mechanism:
     - "LEVER"
     - "BUTTON"
     - "PRESSURE_PLATE"
-    #- "LIGHTNING_ROD"
-    #- "REDSTONE_TORCH"
+    - "LIGHTNING_ROD"
+    - "REDSTONE_TORCH"
   receiver:
     - "LEVER"
     - "BUTTON"
     - "PRESSURE_PLATE"
-    #- "LIGHTNING_ROD"
-    #- "REDSTONE_TORCH"
+    - "LIGHTNING_ROD"
+    - "REDSTONE_TORCH"
   # Можно указать конкретный материал для кнопок и плит
   sender-material: ""
   receiver-material: ""
@@ -54,10 +54,6 @@ transmission:
     disable-ticks: 100
     # Отправлять ли уведомление с координатами при срабатывании
     notify-admins: true
-
-device-names:
-  sender: "Отправитель"
-  receiver: "Получатель"
 
 messages:
   prefix: "&6[QQR] &r"
