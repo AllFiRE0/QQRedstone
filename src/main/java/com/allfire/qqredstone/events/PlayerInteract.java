@@ -7,8 +7,6 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Directional;
-import org.bukkit.block.data.Powerable;
-import org.bukkit.block.data.type.LightningRod;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -45,7 +43,11 @@ public class PlayerInteract implements Listener {
             return;
 
         ItemStack itemInHand = event.getItem();
-        if (itemInHand == null || itemInHand.getType() != Material.WRITABLE_BOOK)
+        if (itemInHand == null) return;
+        
+        Material itemType = itemInHand.getType();
+        // ПОДДЕРЖКА: книга с пером ИЛИ подписанная книга
+        if (itemType != Material.WRITABLE_BOOK && itemType != Material.WRITTEN_BOOK)
             return;
 
         BookMeta bookMeta = (BookMeta) itemInHand.getItemMeta();
@@ -53,13 +55,33 @@ public class PlayerInteract implements Listener {
             return;
 
         String displayName = bookMeta.hasDisplayName() ? bookMeta.getDisplayName() : "";
-        String senderName = plugin.getSenderName();
-        String receiverName = plugin.getReceiverName();
+        
+        // ============================================================
+        // 1. ПРОВЕРКА: Книга-деактиватор (удаление механизма)
+        // ============================================================
+        if (plugin.isRemoverName(displayName)) {
+            event.setCancelled(true);
+            event.setUseInteractedBlock(Event.Result.DENY);
+            event.setUseItemInHand(Event.Result.DENY);
+            
+            Mechanism existing = databaseManager.getMechanismAt(clickedBlock);
+            if (existing != null) {
+                databaseManager.removeMechanism(clickedBlock.getWorld().getName(),
+                        clickedBlock.getX(), clickedBlock.getY(), clickedBlock.getZ());
+                plugin.sendMessage(player, "device-removed");
+            } else {
+                plugin.sendMessage(player, "no-device-at-block");
+            }
+            return;
+        }
 
+        // ============================================================
+        // 2. ПРОВЕРКА: Отправитель или Получатель
+        // ============================================================
         String role = null;
-        if (displayName.equalsIgnoreCase(senderName)) {
+        if (plugin.isSenderName(displayName)) {
             role = "sender";
-        } else if (displayName.equalsIgnoreCase(receiverName)) {
+        } else if (plugin.isReceiverName(displayName)) {
             role = "receiver";
         }
 
@@ -122,7 +144,7 @@ public class PlayerInteract implements Listener {
         // Частота
         String frequency = (bookMeta.getPageCount() > 0) ? bookMeta.getPage(1).trim() : "0";
 
-        // Мощность - с улучшенной проверкой
+        // Мощность
         int bookPower = readBookPower(bookMeta);
         int maxPowerByPerms = getMaxPowerByPermission(player);
         int maxPowerByRegion = plugin.getWorldGuardUtils().getMaxPower(player, clickedBlock);
@@ -156,7 +178,7 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        // ПРОВЕРКА: Если уже есть механизм на этом блоке — удаляем старый
+        // Если уже есть механизм на этом блоке — удаляем старый
         Mechanism existing = databaseManager.getMechanismAt(clickedBlock);
         if (existing != null) {
             databaseManager.removeMechanism(clickedBlock.getWorld().getName(),
@@ -164,7 +186,6 @@ public class PlayerInteract implements Listener {
             plugin.sendMessage(player, "device-overwritten");
         }
 
-        // Добавляем новый механизм
         databaseManager.addMechanism(mechanism);
 
         if (role.equals("sender")) {
@@ -206,10 +227,8 @@ public class PlayerInteract implements Listener {
         BlockFace attachedFace = null;
         Block belowBlock = null;
         
-        // Определяем attached блок в зависимости от типа механизма
         if (blockTypeName.equals("LEVER") || blockTypeName.contains("BUTTON") ||
             blockTypeName.equals("REDSTONE_WALL_TORCH")) {
-            // Настенные механизмы (крепится к блоку, на который указывает)
             if (block.getBlockData() instanceof Directional) {
                 Directional directional = (Directional) block.getBlockData();
                 attachedFace = directional.getFacing().getOppositeFace();
@@ -218,21 +237,18 @@ public class PlayerInteract implements Listener {
         }
         else if (blockTypeName.equals("REDSTONE_TORCH") || blockTypeName.contains("PRESSURE_PLATE") ||
                  blockTypeName.contains("LIGHTNING_ROD")) {
-            // Механизмы, которые стоят на блоке СНИЗУ
             attachedBlock = block.getRelative(BlockFace.DOWN);
             attachedFace = BlockFace.DOWN;
         }
         
-        // Для плит: дополнительно сохраняем блок под плитой (тот же самый)
         if (blockTypeName.contains("PRESSURE_PLATE")) {
             belowBlock = attachedBlock;
         }
         
         if (attachedBlock == null) {
-            return null; // Не удалось определить прикрепление
+            return null;
         }
         
-        // Сохраняем attached данные
         mechanism.setAttachedWorld(attachedBlock.getWorld().getName());
         mechanism.setAttachedX(attachedBlock.getX());
         mechanism.setAttachedY(attachedBlock.getY());
@@ -240,7 +256,6 @@ public class PlayerInteract implements Listener {
         mechanism.setAttachedType(attachedBlock.getType().name());
         mechanism.setAttachedFace(attachedFace != null ? attachedFace.name() : "UP");
         
-        // Сохраняем below данные (для плит)
         if (belowBlock != null) {
             mechanism.setBelowWorld(belowBlock.getWorld().getName());
             mechanism.setBelowX(belowBlock.getX());
@@ -254,33 +269,24 @@ public class PlayerInteract implements Listener {
 
     /**
      * Читает мощность из книги (страница 2)
-     * ИГНОРИРУЕТ текст и другие нечисловые значения
+     * Игнорирует текст и ищет число 1-15
      */
     private int readBookPower(BookMeta meta) {
         if (meta.getPageCount() < 2) return 0;
         try {
             String text = meta.getPage(2).trim();
-            // Убираем цветовые коды и лишние пробелы
             text = text.replaceAll("§[0-9a-fk-or]", "").trim();
-            
-            // Если после очистки строка пустая - возвращаем 0
             if (text.isEmpty()) return 0;
             
-            // Пытаемся найти число в строке (игнорируем текст)
             String[] parts = text.split("\\s+");
             for (String part : parts) {
                 try {
                     int power = Integer.parseInt(part);
-                    // Проверяем, что число в диапазоне 1-15
                     if (power >= 1 && power <= 15) {
                         return power;
                     }
-                } catch (NumberFormatException ignored) {
-                    // Игнорируем текст, продолжаем поиск числа
-                }
+                } catch (NumberFormatException ignored) {}
             }
-            
-            // Если число не найдено - возвращаем 0
             return 0;
         } catch (Exception e) {
             return 0;
