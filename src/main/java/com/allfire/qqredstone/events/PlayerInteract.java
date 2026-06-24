@@ -122,7 +122,7 @@ public class PlayerInteract implements Listener {
         // Частота
         String frequency = (bookMeta.getPageCount() > 0) ? bookMeta.getPage(1).trim() : "0";
 
-        // Мощность
+        // Мощность - с улучшенной проверкой
         int bookPower = readBookPower(bookMeta);
         int maxPowerByPerms = getMaxPowerByPermission(player);
         int maxPowerByRegion = plugin.getWorldGuardUtils().getMaxPower(player, clickedBlock);
@@ -252,14 +252,37 @@ public class PlayerInteract implements Listener {
         return mechanism;
     }
 
+    /**
+     * Читает мощность из книги (страница 2)
+     * ИГНОРИРУЕТ текст и другие нечисловые значения
+     */
     private int readBookPower(BookMeta meta) {
         if (meta.getPageCount() < 2) return 0;
         try {
             String text = meta.getPage(2).trim();
+            // Убираем цветовые коды и лишние пробелы
             text = text.replaceAll("§[0-9a-fk-or]", "").trim();
-            int power = Integer.parseInt(text);
-            return Math.min(Math.max(power, 0), 15);
-        } catch (NumberFormatException e) {
+            
+            // Если после очистки строка пустая - возвращаем 0
+            if (text.isEmpty()) return 0;
+            
+            // Пытаемся найти число в строке (игнорируем текст)
+            String[] parts = text.split("\\s+");
+            for (String part : parts) {
+                try {
+                    int power = Integer.parseInt(part);
+                    // Проверяем, что число в диапазоне 1-15
+                    if (power >= 1 && power <= 15) {
+                        return power;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Игнорируем текст, продолжаем поиск числа
+                }
+            }
+            
+            // Если число не найдено - возвращаем 0
+            return 0;
+        } catch (Exception e) {
             return 0;
         }
     }
