@@ -468,7 +468,7 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
             boolean current = l.isLit();
 
-            // 1. Рычаг → Факел: ДЕРЖИТСЯ (инверсия)
+            // 1. Рычаг → Факел: ДЕРЖИТСЯ (инверсия, как рычаг + рычаг)
             if (senderType.contains("LEVER")) {
                 boolean shouldBeLit = !isOn;
                 if (current != shouldBeLit) {
@@ -476,13 +476,12 @@ public class RedstoneUpdate implements Listener {
                     block.setBlockData(l);
                 }
             }
-            // 2. Кнопка/Плита → Факел: ИМПУЛЬС ПРИ ОТЖАТИИ (как кнопка + кнопка)
+            // 2. Кнопка/Плита → Факел: ИМПУЛЬС ПРИ НАЖАТИИ (гаснет, пока кнопка не отожмётся)
             else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
-                if (!isOn) {
+                if (isOn) {  // ← при НАЖАТИИ!
                     l.setLit(!current);
                     block.setBlockData(l);
-                    
-                    // 15 тиков для всех (как в кнопка + кнопка)
+                    // Таймер на 15 тиков (когда кнопка сама отожмётся)
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
                         if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
                                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
