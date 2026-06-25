@@ -60,16 +60,13 @@ public class PlayerInteract implements Listener {
         // 1. КЛИК В ВОЗДУХ (RIGHT_CLICK_AIR)
         // ============================================================
         if (action == Action.RIGHT_CLICK_AIR) {
-            // Если книга с пером — разрешаем ванильное открытие (редактирование)
             if (itemType == Material.WRITABLE_BOOK) {
                 return;
             }
-            // Если книга подписана — запрещаем открытие интерфейса чтения
             event.setCancelled(true);
             return;
         }
 
-        // Если это не ПКМ по блоку — выходим
         if (action != Action.RIGHT_CLICK_BLOCK) {
             return;
         }
@@ -78,7 +75,7 @@ public class PlayerInteract implements Listener {
         if (clickedBlock == null) return;
 
         // ============================================================
-        // 2. Книга-деактиватор (удаление механизма) — работает на ЛЮБОМ блоке
+        // 2. Книга-деактиватор
         // ============================================================
         if (plugin.isRemoverName(displayName)) {
             event.setCancelled(true);
@@ -97,7 +94,7 @@ public class PlayerInteract implements Listener {
         }
 
         // ============================================================
-        // 3. Отправитель или Получатель — ОТМЕНЯЕМ ДЛЯ ВСЕХ БЛОКОВ
+        // 3. Отправитель или Получатель
         // ============================================================
         String role = null;
         if (plugin.isSenderName(displayName)) {
@@ -110,8 +107,6 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        // Проверяем, является ли блок валидным механизмом из конфига.
-        // Если НЕ валидный — ОТМЕНЯЕМ открытие книги И выводим сообщение
         if (!isValidMechanism(clickedBlock, role)) {
             event.setCancelled(true);
             event.setUseInteractedBlock(Event.Result.DENY);
@@ -120,14 +115,10 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        // ============================================================
-        // Блок — валидный механизм! Отменяем открытие книги и регистрируем
-        // ============================================================
         event.setCancelled(true);
         event.setUseInteractedBlock(Event.Result.DENY);
         event.setUseItemInHand(Event.Result.DENY);
 
-        // Проверки прав
         String worldName = clickedBlock.getWorld().getName();
         if (!player.hasPermission("qqredstone.worlds.use." + worldName) 
                 && !player.hasPermission("qqredstone.worlds.use.*")) {
@@ -270,6 +261,16 @@ public class PlayerInteract implements Listener {
             attachedBlock = block.getRelative(BlockFace.DOWN);
             attachedFace = BlockFace.DOWN;
         }
+        // ===== НОВОЕ: TRAPPED_CHEST =====
+        else if (blockTypeName.equals("TRAPPED_CHEST")) {
+            attachedBlock = block.getRelative(BlockFace.DOWN);
+            attachedFace = BlockFace.DOWN;
+        }
+        // ===== НОВОЕ: CALIBRATED_SCULK_SENSOR =====
+        else if (blockTypeName.equals("CALIBRATED_SCULK_SENSOR")) {
+            attachedBlock = block.getRelative(BlockFace.DOWN);
+            attachedFace = BlockFace.DOWN;
+        }
         
         if (blockTypeName.contains("PRESSURE_PLATE")) {
             belowBlock = attachedBlock;
@@ -343,7 +344,9 @@ public class PlayerInteract implements Listener {
                 || type.contains("PRESSURE_PLATE")
                 || type.contains("LIGHTNING_ROD") 
                 || type.equals("REDSTONE_TORCH") 
-                || type.equals("REDSTONE_WALL_TORCH");
+                || type.equals("REDSTONE_WALL_TORCH")
+                || type.equals("TRAPPED_CHEST")
+                || type.equals("CALIBRATED_SCULK_SENSOR");
         }
 
         List<String> allowedTypes = plugin.getConfig().getStringList("mechanism." + role);
@@ -369,6 +372,12 @@ public class PlayerInteract implements Listener {
                     break;
                 case "REDSTONE_TORCH":
                     if (type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH")) return true;
+                    break;
+                case "TRAPPED_CHEST":
+                    if (type.equals("TRAPPED_CHEST")) return true;
+                    break;
+                case "CALIBRATED_SCULK_SENSOR":
+                    if (type.equals("CALIBRATED_SCULK_SENSOR")) return true;
                     break;
             }
         }
