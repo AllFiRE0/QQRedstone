@@ -18,7 +18,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
-import org.bukkit.metadata.FixedMetadataValue;
 
 import java.util.*;
 
@@ -466,40 +465,13 @@ public class RedstoneUpdate implements Listener {
         if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-            boolean current = l.isLit();
-
-            if (senderType.contains("LEVER")) {
-                // Рычаг → Факел: ИНВЕРСИЯ (синхронно)
-                boolean shouldBeLit = !isOn;
-                if (current != shouldBeLit) {
-                    l.setLit(shouldBeLit);
-                    block.setBlockData(l);
-                }
-            } else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
-                // Кнопка/Плита → Факел: МИГАНИЕ ПРИ ОТЖАТИИ (30 тиков = 1.5 секунды)
-                if (!isOn && !block.hasMetadata("qqr_flicker")) {
-                    l.setLit(!current);
-                    block.setBlockData(l);
-                    
-                    block.setMetadata("qqr_flicker", new FixedMetadataValue(plugin, true));
-                    
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
-                                && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                            org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
-                            ll.setLit(current);
-                            block.setBlockData(ll);
-                        }
-                        block.removeMetadata("qqr_flicker", plugin);
-                    }, 30L);
-                }
-            } else {
-                // Громоотвод/Факел → Факел: ИНВЕРСИЯ (синхронно)
-                boolean shouldBeLit = !isOn;
-                if (current != shouldBeLit) {
-                    l.setLit(shouldBeLit);
-                    block.setBlockData(l);
-                }
+            
+            // Факел инвертирует сигнал (NOT gate)
+            boolean shouldBeLit = !isOn;
+            
+            if (l.isLit() != shouldBeLit) {
+                l.setLit(shouldBeLit);
+                block.setBlockData(l);
             }
             return;
         }
