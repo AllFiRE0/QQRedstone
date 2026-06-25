@@ -172,23 +172,7 @@ public class RedstoneUpdate implements Listener {
 
     private boolean isTrappedChestOpen(Block block) {
         if (block.getType() != Material.TRAPPED_CHEST) return false;
-        
-        try {
-            if (block.getBlockData() instanceof org.bukkit.block.data.type.Chest) {
-                org.bukkit.block.data.type.Chest chest = 
-                    (org.bukkit.block.data.type.Chest) block.getBlockData();
-                return chest.isOpen();
-            }
-        } catch (Exception e) {
-            // Игнорируем
-        }
-        
-        if (block.getState() instanceof org.bukkit.block.Chest) {
-            org.bukkit.block.Chest chest = (org.bukkit.block.Chest) block.getState();
-            return chest.getViewers().size() > 0;
-        }
-        
-        return false;
+        return block.getBlockPower() > 0;
     }
 
     private int getMaxRedstonePower(Block block) {
