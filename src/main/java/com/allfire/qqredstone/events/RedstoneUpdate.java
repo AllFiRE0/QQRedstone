@@ -236,12 +236,13 @@ public class RedstoneUpdate implements Listener {
             if (!isOn) {
                 s.setPowered(true);
                 block.setBlockData(s);
+                int duration = getButtonDuration(block);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
                         Switch ss = (Switch) block.getBlockData();
                         if (ss.isPowered()) { ss.setPowered(false); block.setBlockData(ss); }
                     }
-                }, 15L);
+                }, duration);
             }
             return;
         }
@@ -465,16 +466,56 @@ public class RedstoneUpdate implements Listener {
         if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-            
-            // Факел инвертирует сигнал (NOT gate)
-            boolean shouldBeLit = !isOn;
-            
-            if (l.isLit() != shouldBeLit) {
-                l.setLit(shouldBeLit);
-                block.setBlockData(l);
+            boolean current = l.isLit();
+
+            // 1. Рычаг → Факел: ДЕРЖИТСЯ (инверсия)
+            if (senderType.contains("LEVER")) {
+                boolean shouldBeLit = !isOn;
+                if (current != shouldBeLit) {
+                    l.setLit(shouldBeLit);
+                    block.setBlockData(l);
+                }
+            }
+            // 2. Кнопка/Плита → Факел: ИМПУЛЬС ПРИ ОТЖАТИИ (как кнопка + кнопка)
+            else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+                if (!isOn) {
+                    l.setLit(!current);
+                    block.setBlockData(l);
+                    
+                    // 15 тиков для всех (как в кнопка + кнопка)
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
+                                && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                            org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
+                            ll.setLit(current);
+                            block.setBlockData(ll);
+                        }
+                    }, 15L);
+                }
+            }
+            // 3. Громоотвод/Факел → Факел: ДЕРЖИТСЯ (инверсия)
+            else {
+                boolean shouldBeLit = !isOn;
+                if (current != shouldBeLit) {
+                    l.setLit(shouldBeLit);
+                    block.setBlockData(l);
+                }
             }
             return;
         }
+    }
+
+    private int getButtonDuration(Block block) {
+        String name = block.getType().name();
+        // Деревянные кнопки
+        if (name.contains("OAK") || name.contains("SPRUCE") || name.contains("BIRCH") || 
+            name.contains("JUNGLE") || name.contains("ACACIA") || name.contains("DARK_OAK") ||
+            name.contains("MANGROVE") || name.contains("CHERRY") || name.contains("BAMBOO") ||
+            name.contains("CRIMSON") || name.contains("WARPED")) {
+            return 15;
+        }
+        // Каменные кнопки (STONE, POLISHED_BLACKSTONE и т.д.)
+        return 10;
     }
 
     private boolean isFreqDisabled(String freq) {
