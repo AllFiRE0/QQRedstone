@@ -46,7 +46,6 @@ public class RedstoneUpdate implements Listener {
     public void onBlockPhysics(BlockPhysicsEvent event) {
         Block block = event.getBlock();
         
-        // ОПТИМИЗАЦИЯ: проверяем только нужные блоки
         Material m = block.getType();
         if (m != Material.LEVER && 
             !m.name().contains("BUTTON") && 
@@ -64,7 +63,6 @@ public class RedstoneUpdate implements Listener {
         Mechanism sender = databaseManager.getMechanismAt(block);
         if (sender == null || !sender.getType().equals("sender")) return;
 
-        // ЗАЩИТА ОТ /setblock И СМЫВАНИЯ ВОДОЙ
         Material m = block.getType();
         if (m == Material.AIR || m == Material.WATER || m == Material.LAVA ||
             !isValidMechanismBlock(block)) {
@@ -232,6 +230,9 @@ public class RedstoneUpdate implements Listener {
         }
     }
 
+    // ============================================================
+    // ГЛАВНАЯ ЛОГИКА АКТИВАЦИИ ПОЛУЧАТЕЛЯ
+    // ============================================================
     private void activateReceiver(Block block, boolean isOn, String senderType) {
         String type = block.getType().name();
 
@@ -240,12 +241,12 @@ public class RedstoneUpdate implements Listener {
             Switch switchData = (Switch) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Кнопка: ДЕРЖИТСЯ
+                // Рычаг → Кнопка: ДЕРЖИТСЯ (ВКЛ = нажата, ВЫКЛ = отжата)
                 switchData.setPowered(isOn);
                 block.setBlockData(switchData);
             } else {
                 // Кнопка/Плита/Громоотвод/Факел → Кнопка: ИМПУЛЬС ПРИ ОТЖАТИИ
-                if (!isOn && !switchData.isPowered()) {
+                if (!isOn) {
                     switchData.setPowered(true);
                     block.setBlockData(switchData);
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -292,7 +293,7 @@ public class RedstoneUpdate implements Listener {
                 block.setBlockData(powerable);
             } else {
                 // Кнопка/Плита → Плита: ИМПУЛЬС ПРИ ОТЖАТИИ
-                if (!isOn && !powerable.isPowered()) {
+                if (!isOn) {
                     powerable.setPowered(true);
                     block.setBlockData(powerable);
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -314,12 +315,10 @@ public class RedstoneUpdate implements Listener {
             LightningRod rodData = (LightningRod) block.getBlockData();
             
             if (senderType.equals("LEVER")) {
-                // Рычаг → Громоотвод: ДЕРЖИТСЯ
                 rodData.setPowered(isOn);
                 block.setBlockData(rodData);
             } else {
-                // Кнопка/Плита → Громоотвод: ИМПУЛЬС ПРИ ОТЖАТИИ
-                if (!isOn && !rodData.isPowered()) {
+                if (!isOn) {
                     rodData.setPowered(true);
                     block.setBlockData(rodData);
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
