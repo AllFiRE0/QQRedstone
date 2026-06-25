@@ -52,7 +52,9 @@ public class RedstoneUpdate implements Listener {
             !m.name().contains("PRESSURE_PLATE") &&
             !m.name().contains("LIGHTNING_ROD") &&
             m != Material.REDSTONE_TORCH && 
-            m != Material.REDSTONE_WALL_TORCH) {
+            m != Material.REDSTONE_WALL_TORCH &&
+            m != Material.TRAPPED_CHEST &&
+            m != Material.CALIBRATED_SCULK_SENSOR) {
             return;
         }
         processBlock(block);
@@ -106,7 +108,9 @@ public class RedstoneUpdate implements Listener {
                m.name().contains("PRESSURE_PLATE") ||
                m.name().contains("LIGHTNING_ROD") ||
                m == Material.REDSTONE_TORCH ||
-               m == Material.REDSTONE_WALL_TORCH;
+               m == Material.REDSTONE_WALL_TORCH ||
+               m == Material.TRAPPED_CHEST ||
+               m == Material.CALIBRATED_SCULK_SENSOR;
     }
 
     private boolean validateAttachedBlock(Mechanism mechanism, Block mechanismBlock) {
@@ -155,7 +159,36 @@ public class RedstoneUpdate implements Listener {
             return getMaxRedstonePower(block) > 0 ? 15 : 0;
         }
 
+        if (type.equals("TRAPPED_CHEST")) {
+            return isTrappedChestOpen(block) ? 15 : 0;
+        }
+
+        if (type.equals("CALIBRATED_SCULK_SENSOR")) {
+            return getMaxRedstonePower(block) > 0 ? 15 : 0;
+        }
+
         return getMaxRedstonePower(block);
+    }
+
+    private boolean isTrappedChestOpen(Block block) {
+        if (block.getType() != Material.TRAPPED_CHEST) return false;
+        
+        try {
+            if (block.getBlockData() instanceof org.bukkit.block.data.type.Chest) {
+                org.bukkit.block.data.type.Chest chest = 
+                    (org.bukkit.block.data.type.Chest) block.getBlockData();
+                return chest.isOpen();
+            }
+        } catch (Exception e) {
+            // Игнорируем
+        }
+        
+        if (block.getState() instanceof org.bukkit.block.Chest) {
+            org.bukkit.block.Chest chest = (org.bukkit.block.Chest) block.getState();
+            return chest.getViewers().size() > 0;
+        }
+        
+        return false;
     }
 
     private int getMaxRedstonePower(Block block) {
@@ -292,179 +325,209 @@ public class RedstoneUpdate implements Listener {
             return;
         }
 
+        // ===== НОВОЕ: КНОПКА от TRAPPED_CHEST =====
+        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.equals("TRAPPED_CHEST")) {
+            Switch s = (Switch) block.getBlockData();
+            s.setPowered(isOn);
+            block.setBlockData(s);
+            return;
+        }
+
+        // ===== НОВОЕ: КНОПКА от CALIBRATED_SCULK_SENSOR =====
+        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.equals("CALIBRATED_SCULK_SENSOR")) {
+            Switch s = (Switch) block.getBlockData();
+            if (!isOn) {
+                s.setPowered(true);
+                block.setBlockData(s);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
+                        Switch ss = (Switch) block.getBlockData();
+                        if (ss.isPowered()) { ss.setPowered(false); block.setBlockData(ss); }
+                    }
+                }, 15L);
+            }
+            return;
+        }
+
         // ===== РЫЧАГ-ПОЛУЧАТЕЛЬ =====
-        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("LEVER")) {
+        if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
             Switch s = (Switch) block.getBlockData();
-            if (s.isPowered() != isOn) {
-                s.setPowered(isOn);
-                block.setBlockData(s);
+            
+            // НОВОЕ: от TRAPPED_CHEST - статическое состояние
+            if (senderType.equals("TRAPPED_CHEST")) {
+                if (s.isPowered() != isOn) {
+                    s.setPowered(isOn);
+                    block.setBlockData(s);
+                }
+                return;
             }
-            return;
-        }
-
-        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("BUTTON")) {
-            Switch s = (Switch) block.getBlockData();
-            if (isOn) {
-                s.setPowered(!s.isPowered());
-                block.setBlockData(s);
+            
+            // НОВОЕ: от CALIBRATED_SCULK_SENSOR - переключение
+            if (senderType.equals("CALIBRATED_SCULK_SENSOR")) {
+                if (isOn) {
+                    s.setPowered(!s.isPowered());
+                    block.setBlockData(s);
+                }
+                return;
             }
-            return;
-        }
-
-        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("PRESSURE_PLATE")) {
-            Switch s = (Switch) block.getBlockData();
-            if (isOn) {
-                s.setPowered(!s.isPowered());
-                block.setBlockData(s);
+            
+            if (senderType.contains("LEVER")) {
+                if (s.isPowered() != isOn) {
+                    s.setPowered(isOn);
+                    block.setBlockData(s);
+                }
+                return;
             }
-            return;
-        }
-
-        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("LIGHTNING_ROD")) {
-            Switch s = (Switch) block.getBlockData();
-            if (s.isPowered() != isOn) {
-                s.setPowered(isOn);
-                block.setBlockData(s);
+            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+                if (isOn) {
+                    s.setPowered(!s.isPowered());
+                    block.setBlockData(s);
+                }
+                return;
             }
-            return;
-        }
-
-        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && 
-            (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
-            Switch s = (Switch) block.getBlockData();
-            if (s.isPowered() != isOn) {
-                s.setPowered(isOn);
-                block.setBlockData(s);
+            if (senderType.contains("LIGHTNING_ROD") ||
+                senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH")) {
+                if (s.isPowered() != isOn) {
+                    s.setPowered(isOn);
+                    block.setBlockData(s);
+                }
+                return;
             }
-            return;
         }
 
         // ===== ПЛИТА-ПОЛУЧАТЕЛЬ =====
-        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("LEVER")) {
+        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
-            p.setPowered(isOn);
-            block.setBlockData(p);
-            return;
-        }
-
-        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("BUTTON")) {
-            org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
-            if (!isOn) {
-                p.setPowered(true);
+            
+            // НОВОЕ: от TRAPPED_CHEST - статическое состояние
+            if (senderType.equals("TRAPPED_CHEST")) {
+                p.setPowered(isOn);
                 block.setBlockData(p);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
-                        org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
-                        if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
-                    }
-                }, 15L);
+                return;
             }
-            return;
-        }
-
-        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("PRESSURE_PLATE")) {
-            org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
-            if (!isOn) {
-                p.setPowered(true);
+            
+            // НОВОЕ: от CALIBRATED_SCULK_SENSOR - импульс
+            if (senderType.equals("CALIBRATED_SCULK_SENSOR")) {
+                if (!isOn) {
+                    p.setPowered(true);
+                    block.setBlockData(p);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (block.getType().name().contains("PRESSURE_PLATE") && 
+                            block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+                            org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
+                            if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
+                        }
+                    }, 15L);
+                }
+                return;
+            }
+            
+            if (senderType.contains("LEVER")) {
+                p.setPowered(isOn);
                 block.setBlockData(p);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
-                        org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
-                        if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
-                    }
-                }, 15L);
+                return;
             }
-            return;
-        }
-
-        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("LIGHTNING_ROD")) {
-            org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
-            if (!isOn) {
-                p.setPowered(true);
+            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+                if (!isOn) {
+                    p.setPowered(true);
+                    block.setBlockData(p);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (block.getType().name().contains("PRESSURE_PLATE") && 
+                            block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+                            org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
+                            if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
+                        }
+                    }, 15L);
+                }
+                return;
+            }
+            if (senderType.contains("LIGHTNING_ROD") ||
+                senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH")) {
+                p.setPowered(isOn);
                 block.setBlockData(p);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
-                        org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
-                        if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
-                    }
-                }, 15L);
+                return;
             }
-            return;
-        }
-
-        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && 
-            (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
-            org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
-            if (!isOn) {
-                p.setPowered(true);
-                block.setBlockData(p);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
-                        org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
-                        if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
-                    }
-                }, 15L);
-            }
-            return;
         }
 
         // ===== ГРОМООТВОД-ПОЛУЧАТЕЛЬ =====
-        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("LEVER")) {
+        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
             LightningRod r = (LightningRod) block.getBlockData();
-            r.setPowered(isOn);
-            block.setBlockData(r);
-            return;
-        }
-
-        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("BUTTON")) {
-            LightningRod r = (LightningRod) block.getBlockData();
-            if (!isOn) {
-                r.setPowered(true);
+            
+            // НОВОЕ: от TRAPPED_CHEST - статическое состояние
+            if (senderType.equals("TRAPPED_CHEST")) {
+                r.setPowered(isOn);
                 block.setBlockData(r);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    if (block.getType().name().contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
-                        LightningRod rr = (LightningRod) block.getBlockData();
-                        if (rr.isPowered()) { rr.setPowered(false); block.setBlockData(rr); }
-                    }
-                }, 15L);
+                return;
             }
-            return;
-        }
-
-        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("PRESSURE_PLATE")) {
-            LightningRod r = (LightningRod) block.getBlockData();
-            if (!isOn) {
-                r.setPowered(true);
+            
+            // НОВОЕ: от CALIBRATED_SCULK_SENSOR - импульс
+            if (senderType.equals("CALIBRATED_SCULK_SENSOR")) {
+                if (!isOn) {
+                    r.setPowered(true);
+                    block.setBlockData(r);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (block.getType().name().contains("LIGHTNING_ROD") && 
+                            block.getBlockData() instanceof LightningRod) {
+                            LightningRod rr = (LightningRod) block.getBlockData();
+                            if (rr.isPowered()) { rr.setPowered(false); block.setBlockData(rr); }
+                        }
+                    }, 15L);
+                }
+                return;
+            }
+            
+            if (senderType.contains("LEVER")) {
+                r.setPowered(isOn);
                 block.setBlockData(r);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    if (block.getType().name().contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
-                        LightningRod rr = (LightningRod) block.getBlockData();
-                        if (rr.isPowered()) { rr.setPowered(false); block.setBlockData(rr); }
-                    }
-                }, 15L);
+                return;
             }
-            return;
-        }
-
-        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("LIGHTNING_ROD")) {
-            LightningRod r = (LightningRod) block.getBlockData();
-            r.setPowered(isOn);
-            block.setBlockData(r);
-            return;
-        }
-
-        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && 
-            (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
-            LightningRod r = (LightningRod) block.getBlockData();
-            r.setPowered(isOn);
-            block.setBlockData(r);
-            return;
+            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+                if (!isOn) {
+                    r.setPowered(true);
+                    block.setBlockData(r);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (block.getType().name().contains("LIGHTNING_ROD") && 
+                            block.getBlockData() instanceof LightningRod) {
+                            LightningRod rr = (LightningRod) block.getBlockData();
+                            if (rr.isPowered()) { rr.setPowered(false); block.setBlockData(rr); }
+                        }
+                    }, 15L);
+                }
+                return;
+            }
+            if (senderType.contains("LIGHTNING_ROD") ||
+                senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH")) {
+                if (r.isPowered() != isOn) {
+                    r.setPowered(isOn);
+                    block.setBlockData(r);
+                }
+                return;
+            }
         }
 
         // ===== ФАКЕЛ-ПОЛУЧАТЕЛЬ =====
         if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
+            
+            // НОВОЕ: от TRAPPED_CHEST - статическое состояние
+            if (senderType.equals("TRAPPED_CHEST")) {
+                boolean shouldBeLit = !isOn;
+                if (l.isLit() != shouldBeLit) {
+                    l.setLit(shouldBeLit);
+                    block.setBlockData(l);
+                }
+                return;
+            }
+            
+            // НОВОЕ: от CALIBRATED_SCULK_SENSOR - переключение
+            if (senderType.equals("CALIBRATED_SCULK_SENSOR")) {
+                if (isOn) {
+                    l.setLit(!l.isLit());
+                    block.setBlockData(l);
+                }
+                return;
+            }
             
             // Факел инвертирует сигнал (NOT gate)
             boolean shouldBeLit = !isOn;
