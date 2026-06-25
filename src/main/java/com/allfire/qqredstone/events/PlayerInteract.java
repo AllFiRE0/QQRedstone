@@ -57,9 +57,20 @@ public class PlayerInteract implements Listener {
         }
 
         // ============================================================
-        // КЛИК ПО ВОЗДУХУ (RIGHT_CLICK_AIR) — НЕ ОТМЕНЯЕМ, книга открывается
+        // 1. КЛИК В ВОЗДУХ (RIGHT_CLICK_AIR)
         // ============================================================
         if (action == Action.RIGHT_CLICK_AIR) {
+            // Если книга с пером — разрешаем ванильное открытие (редактирование)
+            if (itemType == Material.WRITABLE_BOOK) {
+                return;
+            }
+            // Если книга подписана — запрещаем открытие интерфейса чтения
+            event.setCancelled(true);
+            return;
+        }
+
+        // Если это не ПКМ по блоку — выходим
+        if (action != Action.RIGHT_CLICK_BLOCK) {
             return;
         }
 
@@ -67,7 +78,7 @@ public class PlayerInteract implements Listener {
         if (clickedBlock == null) return;
 
         // ============================================================
-        // 1. Книга-деактиватор (удаление механизма) — работает на ЛЮБОМ блоке
+        // 2. Книга-деактиватор (удаление механизма) — работает на ЛЮБОМ блоке
         // ============================================================
         if (plugin.isRemoverName(displayName)) {
             event.setCancelled(true);
@@ -86,7 +97,7 @@ public class PlayerInteract implements Listener {
         }
 
         // ============================================================
-        // 2. Отправитель или Получатель
+        // 3. Отправитель или Получатель — ОТМЕНЯЕМ ДЛЯ ВСЕХ БЛОКОВ
         // ============================================================
         String role = null;
         if (plugin.isSenderName(displayName)) {
@@ -99,13 +110,18 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        // Проверяем, является ли блок валидным механизмом
+        // Проверяем, является ли блок валидным механизмом из конфига.
+        // Если НЕ валидный — ОТМЕНЯЕМ открытие книги И выводим сообщение
         if (!isValidMechanism(clickedBlock, role)) {
+            event.setCancelled(true);
+            event.setUseInteractedBlock(Event.Result.DENY);
+            event.setUseItemInHand(Event.Result.DENY);
+            plugin.sendMessage(player, "wrong-mechanism");
             return;
         }
 
         // ============================================================
-        // Блок — валидный механизм! ОТМЕНЯЕМ открытие книги
+        // Блок — валидный механизм! Отменяем открытие книги и регистрируем
         // ============================================================
         event.setCancelled(true);
         event.setUseInteractedBlock(Event.Result.DENY);
