@@ -2,7 +2,6 @@ package com.allfire.qqredstone.database;
 
 import com.allfire.qqredstone.QQRedstone;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.Material;
@@ -221,25 +220,6 @@ public class DatabaseManager {
             }
         }
         return result;
-    }
-    
-    /**
-     * Очищает кэш для указанной локации
-     */
-    public void clearCache(Location loc) {
-        if (loc == null) return;
-        String locKey = loc.getWorld().getName() + "," + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ();
-        
-        Mechanism removed = locationCache.remove(locKey);
-        if (removed != null) {
-            if (removed.getType().equals("sender")) {
-                List<Mechanism> senders = frequencySendersCache.get(removed.getFrequency());
-                if (senders != null) senders.remove(removed);
-            } else {
-                List<Mechanism> receivers = frequencyReceiversCache.get(removed.getFrequency());
-                if (receivers != null) receivers.remove(removed);
-            }
-        }
     }
     
     public void close() {
