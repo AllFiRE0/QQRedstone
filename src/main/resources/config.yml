@@ -13,12 +13,16 @@ mechanism:
     - "LEVER"
     - "BUTTON"
     - "PRESSURE_PLATE"
+    - "TRAPPED_CHEST"
+    - "CALIBRATED_SCULK_SENSOR"
     #- "LIGHTNING_ROD" - не работает в текущей версии.
     #- "REDSTONE_TORCH" - не работает в текущей версии.
   receiver:
     - "LEVER"
     - "BUTTON"
     - "PRESSURE_PLATE"
+    - "TRAPPED_CHEST"
+    - "CALIBRATED_SCULK_SENSOR"
     #- "LIGHTNING_ROD" - не работает в текущей версии.
     #- "REDSTONE_TORCH" - не работает в текущей версии.
   # Можно указать конкретный материал для кнопок и плит
