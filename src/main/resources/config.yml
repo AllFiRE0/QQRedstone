@@ -13,14 +13,14 @@ mechanism:
     - "LEVER"
     - "BUTTON"
     - "PRESSURE_PLATE"
-    - "LIGHTNING_ROD"
-    - "REDSTONE_TORCH"
+    #- "LIGHTNING_ROD" - не работает в текущей версии.
+    #- "REDSTONE_TORCH" - не работает в текущей версии.
   receiver:
     - "LEVER"
     - "BUTTON"
     - "PRESSURE_PLATE"
-    - "LIGHTNING_ROD"
-    - "REDSTONE_TORCH"
+    #- "LIGHTNING_ROD" - не работает в текущей версии.
+    #- "REDSTONE_TORCH" - не работает в текущей версии.
   # Можно указать конкретный материал для кнопок и плит
   sender-material: ""
   receiver-material: ""
