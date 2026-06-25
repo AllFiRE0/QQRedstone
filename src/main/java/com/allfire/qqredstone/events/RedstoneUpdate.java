@@ -11,7 +11,6 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.LightningRod;
 import org.bukkit.block.data.type.Switch;
 import org.bukkit.entity.Player;
@@ -31,20 +30,10 @@ public class RedstoneUpdate implements Listener {
     private final Map<String, Long> lastTransmission = new HashMap<>();
     private final Map<String, Deque<Long>> triggerHistory = new HashMap<>();
     private final Map<String, Long> disabledFreqs = new HashMap<>();
-    
-    private final Set<Location> forcedOffTorches = new HashSet<>();
 
     public RedstoneUpdate(QQRedstone plugin, DatabaseManager databaseManager) {
         this.plugin = plugin;
         this.databaseManager = databaseManager;
-    }
-
-    /**
-     * Безопасное применение состояния блока с принудительным обновлением редстоун-сети
-     */
-    private void applyBlockState(Block block, BlockData data) {
-        block.setBlockData(data, false);
-        block.getState().update(true, true);
     }
 
     @EventHandler
@@ -57,26 +46,6 @@ public class RedstoneUpdate implements Listener {
     public void onBlockPhysics(BlockPhysicsEvent event) {
         Block block = event.getBlock();
         Material m = block.getType();
-        
-        if ((m == Material.REDSTONE_TORCH || m == Material.REDSTONE_WALL_TORCH)
-                && forcedOffTorches.contains(block.getLocation())) {
-            
-            if (block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
-                if (lightable.isLit()) {
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        if (block.getType() == m && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                            org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-                            if (l.isLit() && forcedOffTorches.contains(block.getLocation())) {
-                                l.setLit(false);
-                                applyBlockState(block, l);
-                            }
-                        }
-                    });
-                }
-            }
-            return;
-        }
         
         if (m != Material.LEVER && 
             !m.name().contains("BUTTON") && 
@@ -186,12 +155,6 @@ public class RedstoneUpdate implements Listener {
             return getMaxRedstonePower(block) > 0 ? 15 : 0;
         }
 
-        if (type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH")) {
-            if (block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                return ((org.bukkit.block.data.Lightable) block.getBlockData()).isLit() ? 15 : 0;
-            }
-        }
-
         return getMaxRedstonePower(block);
     }
 
@@ -264,7 +227,7 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.contains("LEVER")) {
             Switch s = (Switch) block.getBlockData();
             s.setPowered(isOn);
-            applyBlockState(block, s);
+            block.setBlockData(s);
             return;
         }
 
@@ -272,17 +235,13 @@ public class RedstoneUpdate implements Listener {
             Switch s = (Switch) block.getBlockData();
             if (!isOn) {
                 s.setPowered(true);
-                applyBlockState(block, s);
-                int duration = getButtonDuration(block);
+                block.setBlockData(s);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
                         Switch ss = (Switch) block.getBlockData();
-                        if (ss.isPowered()) {
-                            ss.setPowered(false);
-                            applyBlockState(block, ss);
-                        }
+                        if (ss.isPowered()) { ss.setPowered(false); block.setBlockData(ss); }
                     }
-                }, duration);
+                }, 15L);
             }
             return;
         }
@@ -291,14 +250,11 @@ public class RedstoneUpdate implements Listener {
             Switch s = (Switch) block.getBlockData();
             if (!isOn) {
                 s.setPowered(true);
-                applyBlockState(block, s);
+                block.setBlockData(s);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
                         Switch ss = (Switch) block.getBlockData();
-                        if (ss.isPowered()) {
-                            ss.setPowered(false);
-                            applyBlockState(block, ss);
-                        }
+                        if (ss.isPowered()) { ss.setPowered(false); block.setBlockData(ss); }
                     }
                 }, 15L);
             }
@@ -309,14 +265,11 @@ public class RedstoneUpdate implements Listener {
             Switch s = (Switch) block.getBlockData();
             if (!isOn) {
                 s.setPowered(true);
-                applyBlockState(block, s);
+                block.setBlockData(s);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
                         Switch ss = (Switch) block.getBlockData();
-                        if (ss.isPowered()) {
-                            ss.setPowered(false);
-                            applyBlockState(block, ss);
-                        }
+                        if (ss.isPowered()) { ss.setPowered(false); block.setBlockData(ss); }
                     }
                 }, 15L);
             }
@@ -328,14 +281,11 @@ public class RedstoneUpdate implements Listener {
             Switch s = (Switch) block.getBlockData();
             if (!isOn) {
                 s.setPowered(true);
-                applyBlockState(block, s);
+                block.setBlockData(s);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
                         Switch ss = (Switch) block.getBlockData();
-                        if (ss.isPowered()) {
-                            ss.setPowered(false);
-                            applyBlockState(block, ss);
-                        }
+                        if (ss.isPowered()) { ss.setPowered(false); block.setBlockData(ss); }
                     }
                 }, 15L);
             }
@@ -347,7 +297,7 @@ public class RedstoneUpdate implements Listener {
             Switch s = (Switch) block.getBlockData();
             if (s.isPowered() != isOn) {
                 s.setPowered(isOn);
-                applyBlockState(block, s);
+                block.setBlockData(s);
             }
             return;
         }
@@ -356,7 +306,7 @@ public class RedstoneUpdate implements Listener {
             Switch s = (Switch) block.getBlockData();
             if (isOn) {
                 s.setPowered(!s.isPowered());
-                applyBlockState(block, s);
+                block.setBlockData(s);
             }
             return;
         }
@@ -365,7 +315,7 @@ public class RedstoneUpdate implements Listener {
             Switch s = (Switch) block.getBlockData();
             if (isOn) {
                 s.setPowered(!s.isPowered());
-                applyBlockState(block, s);
+                block.setBlockData(s);
             }
             return;
         }
@@ -374,7 +324,7 @@ public class RedstoneUpdate implements Listener {
             Switch s = (Switch) block.getBlockData();
             if (s.isPowered() != isOn) {
                 s.setPowered(isOn);
-                applyBlockState(block, s);
+                block.setBlockData(s);
             }
             return;
         }
@@ -384,7 +334,7 @@ public class RedstoneUpdate implements Listener {
             Switch s = (Switch) block.getBlockData();
             if (s.isPowered() != isOn) {
                 s.setPowered(isOn);
-                applyBlockState(block, s);
+                block.setBlockData(s);
             }
             return;
         }
@@ -393,7 +343,7 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("LEVER")) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
             p.setPowered(isOn);
-            applyBlockState(block, p);
+            block.setBlockData(p);
             return;
         }
 
@@ -401,14 +351,11 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
             if (!isOn) {
                 p.setPowered(true);
-                applyBlockState(block, p);
+                block.setBlockData(p);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
                         org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
-                        if (pp.isPowered()) {
-                            pp.setPowered(false);
-                            applyBlockState(block, pp);
-                        }
+                        if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
                     }
                 }, 15L);
             }
@@ -419,14 +366,11 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
             if (!isOn) {
                 p.setPowered(true);
-                applyBlockState(block, p);
+                block.setBlockData(p);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
                         org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
-                        if (pp.isPowered()) {
-                            pp.setPowered(false);
-                            applyBlockState(block, pp);
-                        }
+                        if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
                     }
                 }, 15L);
             }
@@ -437,14 +381,11 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
             if (!isOn) {
                 p.setPowered(true);
-                applyBlockState(block, p);
+                block.setBlockData(p);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
                         org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
-                        if (pp.isPowered()) {
-                            pp.setPowered(false);
-                            applyBlockState(block, pp);
-                        }
+                        if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
                     }
                 }, 15L);
             }
@@ -456,14 +397,11 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
             if (!isOn) {
                 p.setPowered(true);
-                applyBlockState(block, p);
+                block.setBlockData(p);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
                         org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
-                        if (pp.isPowered()) {
-                            pp.setPowered(false);
-                            applyBlockState(block, pp);
-                        }
+                        if (pp.isPowered()) { pp.setPowered(false); block.setBlockData(pp); }
                     }
                 }, 15L);
             }
@@ -474,7 +412,7 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("LEVER")) {
             LightningRod r = (LightningRod) block.getBlockData();
             r.setPowered(isOn);
-            applyBlockState(block, r);
+            block.setBlockData(r);
             return;
         }
 
@@ -482,14 +420,11 @@ public class RedstoneUpdate implements Listener {
             LightningRod r = (LightningRod) block.getBlockData();
             if (!isOn) {
                 r.setPowered(true);
-                applyBlockState(block, r);
+                block.setBlockData(r);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
                         LightningRod rr = (LightningRod) block.getBlockData();
-                        if (rr.isPowered()) {
-                            rr.setPowered(false);
-                            applyBlockState(block, rr);
-                        }
+                        if (rr.isPowered()) { rr.setPowered(false); block.setBlockData(rr); }
                     }
                 }, 15L);
             }
@@ -500,14 +435,11 @@ public class RedstoneUpdate implements Listener {
             LightningRod r = (LightningRod) block.getBlockData();
             if (!isOn) {
                 r.setPowered(true);
-                applyBlockState(block, r);
+                block.setBlockData(r);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (block.getType().name().contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
                         LightningRod rr = (LightningRod) block.getBlockData();
-                        if (rr.isPowered()) {
-                            rr.setPowered(false);
-                            applyBlockState(block, rr);
-                        }
+                        if (rr.isPowered()) { rr.setPowered(false); block.setBlockData(rr); }
                     }
                 }, 15L);
             }
@@ -517,7 +449,7 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("LIGHTNING_ROD")) {
             LightningRod r = (LightningRod) block.getBlockData();
             r.setPowered(isOn);
-            applyBlockState(block, r);
+            block.setBlockData(r);
             return;
         }
 
@@ -525,7 +457,7 @@ public class RedstoneUpdate implements Listener {
             (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
             LightningRod r = (LightningRod) block.getBlockData();
             r.setPowered(isOn);
-            applyBlockState(block, r);
+            block.setBlockData(r);
             return;
         }
 
@@ -533,64 +465,16 @@ public class RedstoneUpdate implements Listener {
         if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-            boolean current = l.isLit();
-            Location loc = block.getLocation();
-
-            if (senderType.contains("LEVER")) {
-                boolean shouldBeLit = !isOn;
-                if (current != shouldBeLit) {
-                    l.setLit(shouldBeLit);
-                    applyBlockState(block, l);
-                    
-                    if (!shouldBeLit) {
-                        forcedOffTorches.add(loc);
-                    } else {
-                        forcedOffTorches.remove(loc);
-                    }
-                }
-            } else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
-                if (isOn) {
-                    l.setLit(false);
-                    applyBlockState(block, l);
-                    forcedOffTorches.add(loc);
-                    
-                    int duration = 15;
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        forcedOffTorches.remove(loc);
-                        if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
-                                && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                            org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
-                            ll.setLit(current);
-                            applyBlockState(block, ll);
-                        }
-                    }, duration);
-                }
-            } else {
-                boolean shouldBeLit = !isOn;
-                if (current != shouldBeLit) {
-                    l.setLit(shouldBeLit);
-                    applyBlockState(block, l);
-                    
-                    if (!shouldBeLit) {
-                        forcedOffTorches.add(loc);
-                    } else {
-                        forcedOffTorches.remove(loc);
-                    }
-                }
+            
+            // Факел инвертирует сигнал (NOT gate)
+            boolean shouldBeLit = !isOn;
+            
+            if (l.isLit() != shouldBeLit) {
+                l.setLit(shouldBeLit);
+                block.setBlockData(l);
             }
             return;
         }
-    }
-
-    private int getButtonDuration(Block block) {
-        String name = block.getType().name();
-        if (name.contains("OAK") || name.contains("SPRUCE") || name.contains("BIRCH") || 
-            name.contains("JUNGLE") || name.contains("ACACIA") || name.contains("DARK_OAK") ||
-            name.contains("MANGROVE") || name.contains("CHERRY") || name.contains("BAMBOO") ||
-            name.contains("CRIMSON") || name.contains("WARPED")) {
-            return 15;
-        }
-        return 10;
     }
 
     private boolean isFreqDisabled(String freq) {
