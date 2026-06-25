@@ -30,6 +30,9 @@ public class RedstoneUpdate implements Listener {
     private final Map<String, Long> lastTransmission = new HashMap<>();
     private final Map<String, Deque<Long>> triggerHistory = new HashMap<>();
     private final Map<String, Long> disabledFreqs = new HashMap<>();
+    
+    // Храним локации факелов-получателей, которые должны быть выключены (подавление физики)
+    private final Set<Location> forcedOffTorches = new HashSet<>();
 
     public RedstoneUpdate(QQRedstone plugin, DatabaseManager databaseManager) {
         this.plugin = plugin;
@@ -47,6 +50,30 @@ public class RedstoneUpdate implements Listener {
         Block block = event.getBlock();
         Material m = block.getType();
         
+        // Проверяем только факелы, которые мы принудительно выключили
+        if ((m == Material.REDSTONE_TORCH || m == Material.REDSTONE_WALL_TORCH)
+                && forcedOffTorches.contains(block.getLocation())) {
+            
+            // Если факел в нашем списке, но ванильная физика пытается его зажечь — тушим обратно
+            if (block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
+                if (lightable.isLit()) {
+                    // Планируем на следующий тик, чтобы дать ванильной физике "сдаться"
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (block.getType() == m && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                            org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
+                            if (l.isLit() && forcedOffTorches.contains(block.getLocation())) {
+                                l.setLit(false);
+                                block.setBlockData(l, false); // false = не вызывать физику
+                            }
+                        }
+                    });
+                }
+            }
+            return;
+        }
+        
+        // Оптимизация для остальных механизмов
         if (m != Material.LEVER && 
             !m.name().contains("BUTTON") && 
             !m.name().contains("PRESSURE_PLATE") &&
@@ -467,29 +494,49 @@ public class RedstoneUpdate implements Listener {
                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
             boolean current = l.isLit();
+            Location loc = block.getLocation();
 
-            // 1. Рычаг → Факел: ДЕРЖИТСЯ (инверсия, как рычаг + рычаг)
+            // 1. Рычаг → Факел: ДЕРЖИТСЯ (инверсия)
             if (senderType.contains("LEVER")) {
                 boolean shouldBeLit = !isOn;
                 if (current != shouldBeLit) {
                     l.setLit(shouldBeLit);
-                    block.setBlockData(l);
+                    block.setBlockData(l, false);
+                    
+                    if (!shouldBeLit) {
+                        // Факел выключен — добавляем в список подавления физики
+                        forcedOffTorches.add(loc);
+                    } else {
+                        // Факел включён — удаляем из списка подавления
+                        forcedOffTorches.remove(loc);
+                    }
                 }
             }
-            // 2. Кнопка/Плита → Факел: ИМПУЛЬС ПРИ НАЖАТИИ (гаснет, пока кнопка не отожмётся)
+            // 2. Кнопка/Плита → Факел: ИМПУЛЬС ПРИ НАЖАТИИ
             else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
-                if (isOn) {  // ← при НАЖАТИИ!
-                    l.setLit(!current);
-                    block.setBlockData(l);
-                    // Таймер на 15 тиков (когда кнопка сама отожмётся)
+                if (isOn) {
+                    // Выключаем факел и добавляем в список подавления
+                    l.setLit(false);
+                    block.setBlockData(l, false);
+                    forcedOffTorches.add(loc);
+                    
+                    // Таймер на возврат (когда кнопка отожмётся через 10/15 тиков)
+                    int duration = 15;
+                    if (senderType.contains("BUTTON")) {
+                        // Пытаемся определить тип кнопки, но в этом контексте у нас нет доступа к блоку-отправителю
+                        // Используем стандартное значение 15
+                    }
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        // Удаляем из списка подавления и возвращаем состояние
+                        forcedOffTorches.remove(loc);
                         if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
                                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
                             org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
+                            // Возвращаем исходное состояние (которое было до нажатия)
                             ll.setLit(current);
-                            block.setBlockData(ll);
+                            block.setBlockData(ll, false);
                         }
-                    }, 15L);
+                    }, duration);
                 }
             }
             // 3. Громоотвод/Факел → Факел: ДЕРЖИТСЯ (инверсия)
@@ -497,7 +544,13 @@ public class RedstoneUpdate implements Listener {
                 boolean shouldBeLit = !isOn;
                 if (current != shouldBeLit) {
                     l.setLit(shouldBeLit);
-                    block.setBlockData(l);
+                    block.setBlockData(l, false);
+                    
+                    if (!shouldBeLit) {
+                        forcedOffTorches.add(loc);
+                    } else {
+                        forcedOffTorches.remove(loc);
+                    }
                 }
             }
             return;
