@@ -3,8 +3,6 @@ package com.allfire.qqredstone.events;
 import com.allfire.qqredstone.QQRedstone;
 import com.allfire.qqredstone.database.DatabaseManager;
 import com.allfire.qqredstone.database.Mechanism;
-import net.md_5.bungee.api.ChatMessageType;
-import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -32,7 +30,6 @@ public class RedstoneUpdate implements Listener {
     private final Map<String, Deque<Long>> triggerHistory = new HashMap<>();
     private final Map<String, Long> disabledFreqs = new HashMap<>();
     
-    // Менеджер принудительного удержания состояния факелов для борьбы с ванильной физикой
     private final Set<Location> forcedOffTorches = new HashSet<>();
 
     public RedstoneUpdate(QQRedstone plugin, DatabaseManager databaseManager) {
@@ -41,23 +38,18 @@ public class RedstoneUpdate implements Listener {
     }
 
     /**
-     * Единственно верный способ применения BlockData в современном Bukkit.
-     * Меняет состояние, обновляет блок в мире и заставляет ядро сервера
-     * честно выполнить ванильный пересчет всей редстоун-сети вокруг.
+     * Безопасное применение состояния блока с принудительным обновлением редстоун-сети.
+     * Флаг true заставляет Bukkit вызвать BlockPhysicsEvent и обновить соседей.
      */
     private void applyBlockState(Block block, BlockData data) {
-        block.setBlockData(data, true);
+        block.setBlockData(data, true); 
         block.getState().update(true, true);
-        block.getWorld().notifyAndSyncOnBlockStateChange(
-            block.getLocation(),
-            data,
-            data
-        );
     }
 
     @EventHandler
     public void onRedstoneChange(BlockRedstoneEvent event) {
-        processBlock(event.getBlock());
+        Block block = event.getBlock();
+        processBlock(block);
     }
 
     @EventHandler
@@ -65,7 +57,6 @@ public class RedstoneUpdate implements Listener {
         Block block = event.getBlock();
         Material m = block.getType();
         
-        // Перехват ванильной физики для заблокированных факелов-получателей
         if ((m == Material.REDSTONE_TORCH || m == Material.REDSTONE_WALL_TORCH)
                 && forcedOffTorches.contains(block.getLocation())) {
             
@@ -103,7 +94,8 @@ public class RedstoneUpdate implements Listener {
 
         String freq = sender.getFrequency().trim();
 
-        if (block.getType() == Material.AIR || block.getType() == Material.WATER || block.getType() == Material.LAVA ||
+        Material m = block.getType();
+        if (m == Material.AIR || m == Material.WATER || m == Material.LAVA ||
             !isValidMechanismBlock(block)) {
             databaseManager.removeMechanism(sender.getWorld(), sender.getX(), sender.getY(), sender.getZ());
             return;
@@ -156,13 +148,17 @@ public class RedstoneUpdate implements Listener {
         String savedType = mechanism.getAttachedType();
         String currentType = attachedBlock.getType().name();
         
-        if (!savedType.equals(currentType)) return false;
+        if (!savedType.equals(currentType)) {
+            return false;
+        }
         
         if (mechanism.getBelowWorld() != null) {
             Block belowBlock = mechanismBlock.getRelative(BlockFace.DOWN);
             String savedBelowType = mechanism.getBelowType();
             String currentBelowType = belowBlock.getType().name();
-            if (!savedBelowType.equals(currentBelowType)) return false;
+            if (!savedBelowType.equals(currentBelowType)) {
+                return false;
+            }
         }
         
         return true;
@@ -209,8 +205,23 @@ public class RedstoneUpdate implements Listener {
 
     private void processSignal(Block block, int vanillaPower, boolean isOn, String freq, Mechanism sender) {
         String powerMode = plugin.getConfig().getString("transmission.power-mode", "vanilla");
-        int finalPower = "book".equals(powerMode) ? (sender.getBookPower() > 0 ? sender.getBookPower() : vanillaPower) :
-                         "both".equals(powerMode) ? Math.max(vanillaPower, sender.getBookPower()) : vanillaPower;
+        
+        int finalPower = 0;
+        int bookPower = sender.getBookPower();
+
+        switch (powerMode) {
+            case "vanilla":
+                finalPower = vanillaPower;
+                break;
+            case "book":
+                finalPower = (bookPower > 0) ? bookPower : vanillaPower;
+                break;
+            case "both":
+                finalPower = Math.max(vanillaPower, bookPower);
+                break;
+            default:
+                finalPower = vanillaPower;
+        }
 
         int configMaxPower = plugin.getConfig().getInt("transmission.max-power", 15);
         finalPower = Math.min(finalPower, configMaxPower);
@@ -221,6 +232,7 @@ public class RedstoneUpdate implements Listener {
         for (Mechanism receiver : receivers) {
             if (!receiver.getWorld().equals(block.getWorld().getName())) {
                 if (!crossWorldEnabled) continue;
+                
                 org.bukkit.OfflinePlayer owner = Bukkit.getOfflinePlayer(UUID.fromString(receiver.getOwnerUuid()));
                 if (owner.isOnline() && owner.getPlayer() != null) {
                     if (!owner.getPlayer().hasPermission("qqredstone.crossworld")
@@ -238,152 +250,167 @@ public class RedstoneUpdate implements Listener {
                 continue;
             }
             
-            // Запуск распределителя логики по твоей матрице 25 комбинаций
-            executeMatrixLogic(receiverBlock, isOn, block.getType().name());
+            activateReceiver(receiverBlock, isOn, block.getType().name());
         }
     }
 
     /**
-     * РЕАЛИЗАЦИЯ МАТРИЦЫ ИЗ 25 КОМБИНАЦИЙ
+     * Твоя изначальная покомбинатная структура, полностью исправленная под ТЗ-матрицу
      */
-    private void executeMatrixLogic(Block block, boolean isOn, String senderType) {
-        String recType = block.getType().name();
-        boolean isButtonSender = senderType.contains("BUTTON");
-        boolean isPlateSender = senderType.contains("PRESSURE_PLATE");
-        boolean isLeverSender = senderType.contains("LEVER");
-        boolean isRodSender = senderType.contains("LIGHTNING_ROD");
-        boolean isTorchSender = senderType.contains("TORCH");
+    private void activateReceiver(Block block, boolean isOn, String senderType) {
+        String type = block.getType().name();
 
         // ==========================================
-        // 1. ПОЛУЧАТЕЛЬ — КНОПКА (BUTTON)
+        // ПОЛУЧАТЕЛЬ — КНОПКА (BUTTON)
         // ==========================================
-        if (recType.contains("BUTTON") && block.getBlockData() instanceof Switch) {
+        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch) {
             Switch s = (Switch) block.getBlockData();
-            
-            // Комбинации: Кнопка->Кнопка (1.1), Плита->Кнопка (3.1), Громоотвод->Кнопка (4.1), Факел->Кнопка (5.1)
-            // Все они работают как Импульс: ВКЛ -> нажимается, ВЫКЛ -> отжимается через 15 тиков
-            if (isButtonSender || isPlateSender || isRodSender || isTorchSender) {
-                if (isOn) {
+
+            // 1.1 Кнопка -> Кнопка (Импульс при нажатии)
+            // 3.1 Плита -> Кнопка (Импульс)
+            // 4.1 Громоотвод -> Кнопка (Импульс)
+            // 5.1 Факел -> Кнопка (Импульс)
+            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE") || 
+                senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
+                
+                if (isOn) { // Исправлено: реагируем строго на нажатие (ВКЛ)
                     s.setPowered(true);
                     applyBlockState(block, s);
-                    
-                    int ticks = getButtonDuration(block); // 15 для дерева, 10 для камня
+                    int duration = getButtonDuration(block);
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
                         if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
-                            Switch current = (Switch) block.getBlockData();
-                            if (current.isPowered()) {
-                                current.setPowered(false);
-                                applyBlockState(block, current);
+                            Switch ss = (Switch) block.getBlockData();
+                            if (ss.isPowered()) {
+                                ss.setPowered(false);
+                                applyBlockState(block, ss);
                             }
                         }
-                    }, ticks);
+                    }, duration);
                 }
+                return;
             }
-            // Комбинация: Рычаг->Кнопка (2.1) -> Держит состояние вкл/выкл напрямую
-            else if (isLeverSender) {
+
+            // 2.1 Рычаг -> Кнопка (Держит состояние)
+            if (senderType.contains("LEVER")) {
                 s.setPowered(isOn);
                 applyBlockState(block, s);
+                return;
             }
-            return;
         }
 
         // ==========================================
-        // 2. ПОЛУЧАТЕЛЬ — РЫЧАГ (LEVER)
+        // ПОЛУЧАТЕЛЬ — РЫЧАГ (LEVER)
         // ==========================================
-        if (recType.equals("LEVER") && block.getBlockData() instanceof Switch) {
+        if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
             Switch s = (Switch) block.getBlockData();
-            
-            // Комбинации: Кнопка->Рычаг (1.2), Плита->Рычаг (3.2) -> Инвертируют (переключают) рычаг при ВКЛ, игнорируют ВЫКЛ
-            if (isButtonSender || isPlateSender) {
-                if (isOn) {
+
+            // 1.2 Кнопка -> Рычаг (Переключение при нажатии)
+            // 3.2 Плита -> Рычаг (Переключение при нажатии)
+            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+                if (isOn) { // Переключаем только в момент ВКЛ отправителя
                     s.setPowered(!s.isPowered());
                     applyBlockState(block, s);
                 }
+                return;
             }
-            // Комбинации: Рычаг->Рычаг (2.2), Громоотвод->Рычаг (4.2), Факел->Рычаг (5.2) -> Держат состояние напрямую
-            else if (isLeverSender || isRodSender || isTorchSender) {
+
+            // 2.2 Рычаг -> Рычаг (Держит состояние)
+            // 4.2 Громоотвод -> Рычаг (Держит состояние)
+            // 5.2 Факел -> Рычаг (Держит состояние)
+            if (senderType.contains("LEVER") || senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
                 if (s.isPowered() != isOn) {
                     s.setPowered(isOn);
                     applyBlockState(block, s);
                 }
+                return;
             }
-            return;
         }
 
         // ==========================================
-        // 3. ПОЛУЧАТЕЛЬ — ПЛИТА (PRESSURE_PLATE)
+        // ПОЛУЧАТЕЛЬ — ПЛИТА (PRESSURE_PLATE)
         // ==========================================
-        if (recType.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
-            
-            // Комбинации: Кнопка->Плита (1.3), Плита->Плита (3.3), Громоотвод->Плита (4.3), Факел->Плита (5.3) -> Импульс
-            if (isButtonSender || isPlateSender || isRodSender || isTorchSender) {
-                if (isOn) {
+
+            // 1.3 Кнопка -> Плита (Импульс)
+            // 3.3 Плита -> Плита (Импульс)
+            // 4.3 Громоотвод -> Плита (Импульс)
+            // 5.3 Факел -> Плита (Импульс)
+            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE") || 
+                senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
+                
+                if (isOn) { // Исправлено: запуск импульса строго при ВКЛ
                     p.setPowered(true);
                     applyBlockState(block, p);
-                    
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
                         if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
-                            org.bukkit.block.data.Powerable current = (org.bukkit.block.data.Powerable) block.getBlockData();
-                            if (current.isPowered()) {
-                                current.setPowered(false);
-                                applyBlockState(block, current);
-                            }
-                        }
-                    }, 15L); // Ровно 15 тиков по ТЗ
-                }
-            }
-            // Комбинация: Рычаг->Плита (2.3) -> Держит состояние напрямую
-            else if (isLeverSender) {
-                p.setPowered(isOn);
-                applyBlockState(block, p);
-            }
-            return;
-        }
-
-        // ==========================================
-        // 4. ПОЛУЧАТЕЛЬ — ГРОМООТВОД (LIGHTNING_ROD)
-        // ==========================================
-        if (recType.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
-            LightningRod r = (LightningRod) block.getBlockData();
-            
-            // Комбинации: Кнопка->Громоотвод (1.4), Плита->Громоотвод (3.4) -> Импульс на 15 тиков
-            if (isButtonSender || isPlateSender) {
-                if (isOn) {
-                    r.setPowered(true);
-                    applyBlockState(block, r);
-                    
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        if (block.getType().name().contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
-                            LightningRod current = (LightningRod) block.getBlockData();
-                            if (current.isPowered()) {
-                                current.setPowered(false);
-                                applyBlockState(block, current);
+                            org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
+                            if (pp.isPowered()) {
+                                pp.setPowered(false);
+                                applyBlockState(block, pp);
                             }
                         }
                     }, 15L);
                 }
+                return;
             }
-            // Комбинации: Рычаг->Громоотвод (2.4), Громоотвод->Громоотвод (4.4), Факел->Громоотвод (5.4) -> Держит состояние
-            else if (isLeverSender || isRodSender || isTorchSender) {
+
+            // 2.3 Рычаг -> Плита (Держит состояние)
+            if (senderType.contains("LEVER")) {
+                p.setPowered(isOn);
+                applyBlockState(block, p);
+                return;
+            }
+        }
+
+        // ==========================================
+        // ПОЛУЧАТЕЛЬ — ГРОМООТВОД (LIGHTNING_ROD)
+        // ==========================================
+        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
+            LightningRod r = (LightningRod) block.getBlockData();
+
+            // 1.4 Кнопка -> Громоотвод (Импульс)
+            // 3.4 Плита -> Громоотвод (Импульс)
+            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+                if (isOn) {
+                    r.setPowered(true);
+                    applyBlockState(block, r);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (block.getType().name().contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
+                            LightningRod rr = (LightningRod) block.getBlockData();
+                            if (rr.isPowered()) {
+                                rr.setPowered(false);
+                                applyBlockState(block, rr);
+                            }
+                        }
+                    }, 15L);
+                }
+                return;
+            }
+
+            // 2.4 Рычаг -> Громоотвод (Держит состояние)
+            // 4.4 Громоотвод -> Громоотвод (Держит состояние)
+            // 5.4 Факел -> Громоотвод (Держит состояние)
+            if (senderType.contains("LEVER") || senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
                 if (r.isPowered() != isOn) {
                     r.setPowered(isOn);
                     applyBlockState(block, r);
                 }
+                return;
             }
-            return;
         }
 
         // ==========================================
-        // 5. ПОЛУЧАТЕЛЬ — РЕДСТОУН-ФАКЕЛ (TORCH)
+        // ПОЛУЧАТЕЛЬ — РЕДСТОУН-ФАКЕЛ (TORCH)
         // ==========================================
-        if ((recType.equals("REDSTONE_TORCH") || recType.equals("REDSTONE_WALL_TORCH")) 
+        if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
             Location loc = block.getLocation();
-            
-            // Комбинации: Кнопка->Факел (1.5), Плита->Факел (3.5) -> Импульсное мигание (гасится при ВКЛ, возвращается через 15 тиков)
-            if (isButtonSender || isPlateSender) {
+
+            // 1.5 Кнопка -> Факел (Мигание / Импульс наоборот)
+            // 3.5 Плита -> Факел (Мигание / Импульс наоборот)
+            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
                 if (isOn) {
                     l.setLit(false);
                     applyBlockState(block, l);
@@ -393,15 +420,19 @@ public class RedstoneUpdate implements Listener {
                         forcedOffTorches.remove(loc);
                         if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
                                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                            org.bukkit.block.data.Lightable current = (org.bukkit.block.data.Lightable) block.getBlockData();
-                            current.setLit(true);
-                            applyBlockState(block, current);
+                            org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
+                            ll.setLit(true);
+                            applyBlockState(block, ll);
                         }
                     }, 15L);
                 }
+                return;
             }
-            // Комбинации: Рычаг->Факел (2.5), Громоотвод->Факел (4.5), Факел->Факел (5.5) -> Полная инверсия (ВКЛ = погас, ВЫКЛ = горит)
-            else if (isLeverSender || isRodSender || isTorchSender) {
+
+            // 2.5 Рычаг -> Факел (Инверсия)
+            // 4.5 Громоотвод -> Факел (Инверсия)
+            // 5.5 Факел -> Факел (Инверсия)
+            if (senderType.contains("LEVER") || senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
                 boolean shouldBeLit = !isOn;
                 if (l.isLit() != shouldBeLit) {
                     l.setLit(shouldBeLit);
@@ -413,8 +444,8 @@ public class RedstoneUpdate implements Listener {
                         forcedOffTorches.remove(loc);
                     }
                 }
+                return;
             }
-            return;
         }
     }
 
@@ -424,9 +455,9 @@ public class RedstoneUpdate implements Listener {
             name.contains("JUNGLE") || name.contains("ACACIA") || name.contains("DARK_OAK") ||
             name.contains("MANGROVE") || name.contains("CHERRY") || name.contains("BAMBOO") ||
             name.contains("CRIMSON") || name.contains("WARPED")) {
-            return 15; // По ТЗ деревянные кнопки держим 15 тиков
+            return 15;
         }
-        return 10; // Каменные — 10 тиков
+        return 10;
     }
 
     private boolean isFreqDisabled(String freq) {
@@ -493,10 +524,22 @@ public class RedstoneUpdate implements Listener {
     public void resetFreq(String freq) {
         disabledFreqs.remove(freq);
         triggerHistory.remove(freq);
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.hasPermission("qqredstone.notification") || player.isOp()) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                    "&a[QQR] &eБлокировка частоты &6" + freq + " &eсброшена."));
+            }
+        }
     }
 
     public void resetAllFreqs() {
         disabledFreqs.clear();
         triggerHistory.clear();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.hasPermission("qqredstone.notification") || player.isOp()) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                    "&a[QQR] &eВсе блокировки частот сброшены."));
+            }
+        }
     }
 }
