@@ -3,8 +3,6 @@ package com.allfire.qqredstone.events;
 import com.allfire.qqredstone.QQRedstone;
 import com.allfire.qqredstone.database.DatabaseManager;
 import com.allfire.qqredstone.database.Mechanism;
-import net.md_5.bungee.api.ChatMessageType;
-import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -467,24 +465,29 @@ public class RedstoneUpdate implements Listener {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
             boolean current = l.isLit();
 
+            plugin.getLogger().info("[ФАКЕЛ] senderType=" + senderType + " | isOn=" + isOn + " | current=" + current);
+
             if (senderType.contains("LEVER")) {
                 // Рычаг → Факел: ИНВЕРСИЯ (синхронно)
                 boolean shouldBeLit = !isOn;
                 if (current != shouldBeLit) {
                     l.setLit(shouldBeLit);
                     block.setBlockData(l);
+                    plugin.getLogger().info("[ФАКЕЛ] Рычаг → Факел: " + (shouldBeLit ? "ЗАЖЁГ" : "ПОТУШИЛ"));
                 }
             } else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
                 // Кнопка/Плита → Факел: МИГАНИЕ ПРИ ОТЖАТИИ (15 тиков)
                 if (!isOn) {
                     l.setLit(!current);
                     block.setBlockData(l);
+                    plugin.getLogger().info("[ФАКЕЛ] Кнопка/Плита → Факел: МИГАНИЕ, было=" + current + ", стало=" + !current);
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
                         if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
                                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
                             org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
                             ll.setLit(current);
                             block.setBlockData(ll);
+                            plugin.getLogger().info("[ФАКЕЛ] МИГАНИЕ ВЕРНУЛОСЬ: current=" + current);
                         }
                     }, 15L);
                 }
@@ -494,6 +497,7 @@ public class RedstoneUpdate implements Listener {
                 if (current != shouldBeLit) {
                     l.setLit(shouldBeLit);
                     block.setBlockData(l);
+                    plugin.getLogger().info("[ФАКЕЛ] Громоотвод/Факел → Факел: " + (shouldBeLit ? "ЗАЖЁГ" : "ПОТУШИЛ"));
                 }
             }
             return;

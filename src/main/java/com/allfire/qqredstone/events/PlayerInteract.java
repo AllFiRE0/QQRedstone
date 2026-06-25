@@ -63,22 +63,17 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        // ============================================================
-        // КЛИК ПО ЛЮБОМУ БЛОКУ — ОТМЕНЯЕМ ОТКРЫТИЕ КНИГИ ВСЕГДА
-        // ============================================================
-        if (action == Action.RIGHT_CLICK_BLOCK || action == Action.PHYSICAL) {
-            event.setCancelled(true);
-            event.setUseInteractedBlock(Event.Result.DENY);
-            event.setUseItemInHand(Event.Result.DENY);
-        }
-
         Block clickedBlock = event.getClickedBlock();
         if (clickedBlock == null) return;
 
         // ============================================================
-        // 1. Книга-деактиватор (удаление механизма)
+        // 1. Книга-деактиватор (удаление механизма) — работает на ЛЮБОМ блоке
         // ============================================================
         if (plugin.isRemoverName(displayName)) {
+            event.setCancelled(true);
+            event.setUseInteractedBlock(Event.Result.DENY);
+            event.setUseItemInHand(Event.Result.DENY);
+            
             Mechanism existing = databaseManager.getMechanismAt(clickedBlock);
             if (existing != null) {
                 databaseManager.removeMechanism(clickedBlock.getWorld().getName(),
@@ -91,7 +86,7 @@ public class PlayerInteract implements Listener {
         }
 
         // ============================================================
-        // 2. Отправитель или Получатель
+        // 2. Отправитель или Получатель — ОТМЕНЯЕМ ТОЛЬКО ДЛЯ ВАЛИДНЫХ МЕХАНИЗМОВ
         // ============================================================
         String role = null;
         if (plugin.isSenderName(displayName)) {
@@ -104,11 +99,20 @@ public class PlayerInteract implements Listener {
             return;
         }
 
+        // Проверяем, является ли блок валидным механизмом
         if (!isValidMechanism(clickedBlock, role)) {
-            plugin.sendMessage(player, "wrong-mechanism");
+            // НЕ ОТМЕНЯЕМ событие — книга открывается (если это книга с пером)
             return;
         }
 
+        // ============================================================
+        // Блок — валидный механизм! ОТМЕНЯЕМ открытие книги
+        // ============================================================
+        event.setCancelled(true);
+        event.setUseInteractedBlock(Event.Result.DENY);
+        event.setUseItemInHand(Event.Result.DENY);
+
+        // Проверки прав
         String worldName = clickedBlock.getWorld().getName();
         if (!player.hasPermission("qqredstone.worlds.use." + worldName) 
                 && !player.hasPermission("qqredstone.worlds.use.*")) {
