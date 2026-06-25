@@ -33,20 +33,12 @@ public class PlayerInteract implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onMechanismClick(PlayerInteractEvent event) {
         Player player = event.getPlayer();
-        
         Action action = event.getAction();
-        if (action != Action.RIGHT_CLICK_BLOCK && action != Action.PHYSICAL)
-            return;
-
-        Block clickedBlock = event.getClickedBlock();
-        if (clickedBlock == null)
-            return;
-
+        
         ItemStack itemInHand = event.getItem();
         if (itemInHand == null) return;
         
         Material itemType = itemInHand.getType();
-        // ПОДДЕРЖКА: книга с пером ИЛИ подписанная книга
         if (itemType != Material.WRITABLE_BOOK && itemType != Material.WRITTEN_BOOK)
             return;
 
@@ -56,14 +48,37 @@ public class PlayerInteract implements Listener {
 
         String displayName = bookMeta.hasDisplayName() ? bookMeta.getDisplayName() : "";
         
+        boolean isSpecialBook = plugin.isSenderName(displayName) || 
+                                plugin.isReceiverName(displayName) || 
+                                plugin.isRemoverName(displayName);
+        
+        if (!isSpecialBook) {
+            return;
+        }
+
         // ============================================================
-        // 1. ПРОВЕРКА: Книга-деактиватор (удаление механизма)
+        // КЛИК ПО ВОЗДУХУ (RIGHT_CLICK_AIR) — НЕ ОТМЕНЯЕМ, книга открывается
         // ============================================================
-        if (plugin.isRemoverName(displayName)) {
+        if (action == Action.RIGHT_CLICK_AIR) {
+            return;
+        }
+
+        // ============================================================
+        // КЛИК ПО ЛЮБОМУ БЛОКУ (RIGHT_CLICK_BLOCK) — ОТМЕНЯЕМ ОТКРЫТИЕ
+        // ============================================================
+        if (action == Action.RIGHT_CLICK_BLOCK) {
             event.setCancelled(true);
             event.setUseInteractedBlock(Event.Result.DENY);
             event.setUseItemInHand(Event.Result.DENY);
-            
+        }
+
+        Block clickedBlock = event.getClickedBlock();
+        if (clickedBlock == null) return;
+
+        // ============================================================
+        // 1. Книга-деактиватор (удаление механизма)
+        // ============================================================
+        if (plugin.isRemoverName(displayName)) {
             Mechanism existing = databaseManager.getMechanismAt(clickedBlock);
             if (existing != null) {
                 databaseManager.removeMechanism(clickedBlock.getWorld().getName(),
@@ -76,7 +91,7 @@ public class PlayerInteract implements Listener {
         }
 
         // ============================================================
-        // 2. ПРОВЕРКА: Отправитель или Получатель
+        // 2. Отправитель или Получатель
         // ============================================================
         String role = null;
         if (plugin.isSenderName(displayName)) {
@@ -94,12 +109,6 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        // Сразу отменяем открытие книги
-        event.setCancelled(true);
-        event.setUseInteractedBlock(Event.Result.DENY);
-        event.setUseItemInHand(Event.Result.DENY);
-
-        // Проверки прав
         String worldName = clickedBlock.getWorld().getName();
         if (!player.hasPermission("qqredstone.worlds.use." + worldName) 
                 && !player.hasPermission("qqredstone.worlds.use.*")) {
@@ -134,17 +143,14 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        // Проверка владельца (с учётом админского оверрайда)
         if (databaseManager.isOwnedByOther(clickedBlock, player.getUniqueId().toString(),
                 player.hasPermission("qqredstone.admin.override"))) {
             plugin.sendMessage(player, "already-owned");
             return;
         }
 
-        // Частота
         String frequency = (bookMeta.getPageCount() > 0) ? bookMeta.getPage(1).trim() : "0";
 
-        // Мощность
         int bookPower = readBookPower(bookMeta);
         int maxPowerByPerms = getMaxPowerByPermission(player);
         int maxPowerByRegion = plugin.getWorldGuardUtils().getMaxPower(player, clickedBlock);
@@ -169,7 +175,6 @@ public class PlayerInteract implements Listener {
             }
         }
 
-        // Определяем attached блок и below блок
         Mechanism mechanism = createMechanismFromBlock(clickedBlock, role, frequency, 
                 player.getUniqueId().toString(), savedPower);
         
@@ -178,7 +183,6 @@ public class PlayerInteract implements Listener {
             return;
         }
 
-        // Если уже есть механизм на этом блоке — удаляем старый
         Mechanism existing = databaseManager.getMechanismAt(clickedBlock);
         if (existing != null) {
             databaseManager.removeMechanism(clickedBlock.getWorld().getName(),
@@ -207,9 +211,6 @@ public class PlayerInteract implements Listener {
         }
     }
 
-    /**
-     * Создаёт объект Mechanism с определением attached/below блоков
-     */
     private Mechanism createMechanismFromBlock(Block block, String type, String frequency, 
                                                 String ownerUuid, int bookPower) {
         Mechanism mechanism = new Mechanism();
@@ -267,10 +268,6 @@ public class PlayerInteract implements Listener {
         return mechanism;
     }
 
-    /**
-     * Читает мощность из книги (страница 2)
-     * Игнорирует текст и ищет число 1-15
-     */
     private int readBookPower(BookMeta meta) {
         if (meta.getPageCount() < 2) return 0;
         try {
