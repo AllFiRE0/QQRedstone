@@ -86,7 +86,7 @@ public class PlayerInteract implements Listener {
         }
 
         // ============================================================
-        // 2. Отправитель или Получатель — ОТМЕНЯЕМ ТОЛЬКО ДЛЯ ВАЛИДНЫХ МЕХАНИЗМОВ
+        // 2. Отправитель или Получатель
         // ============================================================
         String role = null;
         if (plugin.isSenderName(displayName)) {
@@ -101,7 +101,6 @@ public class PlayerInteract implements Listener {
 
         // Проверяем, является ли блок валидным механизмом
         if (!isValidMechanism(clickedBlock, role)) {
-            // НЕ ОТМЕНЯЕМ событие — книга открывается (если это книга с пером)
             return;
         }
 
