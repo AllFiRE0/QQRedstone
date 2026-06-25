@@ -31,7 +31,6 @@ public class RedstoneUpdate implements Listener {
     private final Map<String, Deque<Long>> triggerHistory = new HashMap<>();
     private final Map<String, Long> disabledFreqs = new HashMap<>();
     
-    // Храним локации факелов-получателей, которые должны быть выключены (подавление физики)
     private final Set<Location> forcedOffTorches = new HashSet<>();
 
     public RedstoneUpdate(QQRedstone plugin, DatabaseManager databaseManager) {
@@ -50,21 +49,18 @@ public class RedstoneUpdate implements Listener {
         Block block = event.getBlock();
         Material m = block.getType();
         
-        // Проверяем только факелы, которые мы принудительно выключили
         if ((m == Material.REDSTONE_TORCH || m == Material.REDSTONE_WALL_TORCH)
                 && forcedOffTorches.contains(block.getLocation())) {
             
-            // Если факел в нашем списке, но ванильная физика пытается его зажечь — тушим обратно
             if (block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
                 org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
                 if (lightable.isLit()) {
-                    // Планируем на следующий тик, чтобы дать ванильной физике "сдаться"
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         if (block.getType() == m && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
                             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
                             if (l.isLit() && forcedOffTorches.contains(block.getLocation())) {
                                 l.setLit(false);
-                                block.setBlockData(l, false); // false = не вызывать физику
+                                block.setBlockData(l, false);
                             }
                         }
                     });
@@ -73,7 +69,6 @@ public class RedstoneUpdate implements Listener {
             return;
         }
         
-        // Оптимизация для остальных механизмов
         if (m != Material.LEVER && 
             !m.name().contains("BUTTON") && 
             !m.name().contains("PRESSURE_PLATE") &&
@@ -180,6 +175,15 @@ public class RedstoneUpdate implements Listener {
 
         if (type.contains("LIGHTNING_ROD")) {
             return getMaxRedstonePower(block) > 0 ? 15 : 0;
+        }
+
+        // ==========================================
+        // ПРОВЕРКА ДЛЯ ФАКЕЛОВ-ОТПРАВИТЕЛЕЙ
+        // ==========================================
+        if (type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH")) {
+            if (block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                return ((org.bukkit.block.data.Lightable) block.getBlockData()).isLit() ? 15 : 0;
+            }
         }
 
         return getMaxRedstonePower(block);
@@ -496,51 +500,42 @@ public class RedstoneUpdate implements Listener {
             boolean current = l.isLit();
             Location loc = block.getLocation();
 
-            // 1. Рычаг → Факел: ДЕРЖИТСЯ (инверсия)
             if (senderType.contains("LEVER")) {
+                // Рычаг → Факел: ДЕРЖИТСЯ (инверсия)
                 boolean shouldBeLit = !isOn;
                 if (current != shouldBeLit) {
                     l.setLit(shouldBeLit);
                     block.setBlockData(l, false);
                     
                     if (!shouldBeLit) {
-                        // Факел выключен — добавляем в список подавления физики
                         forcedOffTorches.add(loc);
                     } else {
-                        // Факел включён — удаляем из списка подавления
                         forcedOffTorches.remove(loc);
                     }
                 }
-            }
-            // 2. Кнопка/Плита → Факел: ИМПУЛЬС ПРИ НАЖАТИИ
-            else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+            } else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+                // Кнопка/Плита → Факел: ИМПУЛЬС ПРИ НАЖАТИИ
                 if (isOn) {
-                    // Выключаем факел и добавляем в список подавления
                     l.setLit(false);
                     block.setBlockData(l, false);
                     forcedOffTorches.add(loc);
                     
-                    // Таймер на возврат (когда кнопка отожмётся через 10/15 тиков)
                     int duration = 15;
                     if (senderType.contains("BUTTON")) {
-                        // Пытаемся определить тип кнопки, но в этом контексте у нас нет доступа к блоку-отправителю
-                        // Используем стандартное значение 15
+                        // Можно попытаться определить тип кнопки
                     }
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        // Удаляем из списка подавления и возвращаем состояние
                         forcedOffTorches.remove(loc);
                         if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
                                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
                             org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
-                            // Возвращаем исходное состояние (которое было до нажатия)
                             ll.setLit(current);
                             block.setBlockData(ll, false);
                         }
                     }, duration);
                 }
-            }
-            // 3. Громоотвод/Факел → Факел: ДЕРЖИТСЯ (инверсия)
-            else {
+            } else {
+                // Громоотвод/Факел → Факел: ДЕРЖИТСЯ (инверсия)
                 boolean shouldBeLit = !isOn;
                 if (current != shouldBeLit) {
                     l.setLit(shouldBeLit);
@@ -559,14 +554,12 @@ public class RedstoneUpdate implements Listener {
 
     private int getButtonDuration(Block block) {
         String name = block.getType().name();
-        // Деревянные кнопки
         if (name.contains("OAK") || name.contains("SPRUCE") || name.contains("BIRCH") || 
             name.contains("JUNGLE") || name.contains("ACACIA") || name.contains("DARK_OAK") ||
             name.contains("MANGROVE") || name.contains("CHERRY") || name.contains("BAMBOO") ||
             name.contains("CRIMSON") || name.contains("WARPED")) {
             return 15;
         }
-        // Каменные кнопки (STONE, POLISHED_BLACKSTONE и т.д.)
         return 10;
     }
 
