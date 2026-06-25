@@ -39,7 +39,7 @@ public class RedstoneUpdate implements Listener {
     @EventHandler
     public void onRedstoneChange(BlockRedstoneEvent event) {
         Block block = event.getBlock();
-        processBlock(block);
+        processBlock(block, event.getNewPower());
     }
 
     @EventHandler
@@ -56,10 +56,10 @@ public class RedstoneUpdate implements Listener {
             return;
         }
         
-        processBlock(block);
+        processBlock(block, getMechanismPower(block));
     }
 
-    private void processBlock(Block block) {
+    private void processBlock(Block block, int power) {
         Mechanism sender = databaseManager.getMechanismAt(block);
         if (sender == null || !sender.getType().equals("sender")) return;
 
@@ -87,7 +87,6 @@ public class RedstoneUpdate implements Listener {
         if (isOnCooldown(freq)) return;
         if (!checkAntiFlood(freq, block)) return;
 
-        int power = getMechanismPower(block);
         Location loc = block.getLocation();
         boolean isPoweredNow = (power > 0);
 
