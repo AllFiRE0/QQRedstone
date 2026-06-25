@@ -3,6 +3,8 @@ package com.allfire.qqredstone.events;
 import com.allfire.qqredstone.QQRedstone;
 import com.allfire.qqredstone.database.DatabaseManager;
 import com.allfire.qqredstone.database.Mechanism;
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -75,7 +77,11 @@ public class RedstoneUpdate implements Listener {
             plugin.getLogger().info("[ДЕБАГ] processBlock: Блок найден, но НЕ отправитель (тип: " + sender.getType() + ")");
             return;
         }
-        plugin.getLogger().info("[ДЕБАГ] processBlock: Найден отправитель! Частота: " + sender.getFrequency());
+        
+        String freq = sender.getFrequency();
+        freq = freq.trim(); // ← ОБРЕЗАЕМ ПРОБЕЛЫ И ПЕРЕНОСЫ
+        
+        plugin.getLogger().info("[ДЕБАГ] processBlock: Найден отправитель! Частота: " + freq);
 
         Material m = block.getType();
         if (m == Material.AIR || m == Material.WATER || m == Material.LAVA ||
@@ -90,8 +96,6 @@ public class RedstoneUpdate implements Listener {
             databaseManager.removeMechanism(sender.getWorld(), sender.getX(), sender.getY(), sender.getZ());
             return;
         }
-
-        String freq = sender.getFrequency();
 
         if (isFreqDisabled(freq)) {
             plugin.getLogger().info("[ДЕБАГ] processBlock: Частота " + freq + " заблокирована");
@@ -277,8 +281,8 @@ public class RedstoneUpdate implements Listener {
             }
             
             plugin.getLogger().info("[ДЕБАГ] processSignal: Активируем получатель с isOn=" + isOn + 
-                    " | senderType=" + sender.getType());
-            activateReceiver(receiverBlock, isOn, sender.getType());
+                    " | senderType=" + block.getType().name()); // ← ПЕРЕДАЁМ ТИП БЛОКА
+            activateReceiver(receiverBlock, isOn, block.getType().name());
         }
     }
 

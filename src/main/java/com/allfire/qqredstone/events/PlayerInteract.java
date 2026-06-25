@@ -109,6 +109,49 @@ public class PlayerInteract implements Listener {
             return;
         }
 
+        // ============================================================
+        // ЧАСТОТА (страница 1) — берём до первого пробела
+        // ============================================================
+        String frequency = "0";
+        if (bookMeta.getPageCount() > 0) {
+            String raw = bookMeta.getPage(1);
+            int spaceIndex = raw.indexOf(' ');
+            if (spaceIndex != -1) {
+                frequency = raw.substring(0, spaceIndex).trim();
+            } else {
+                frequency = raw.trim();
+            }
+        }
+        if (frequency.isEmpty()) frequency = "0";
+
+        // ============================================================
+        // МОЩНОСТЬ (страница 2) — число 1-15, иначе 15
+        // ============================================================
+        int bookPower = readBookPower(bookMeta);
+        int maxPowerByPerms = getMaxPowerByPermission(player);
+        int maxPowerByRegion = plugin.getWorldGuardUtils().getMaxPower(player, clickedBlock);
+        int maxPower = Math.min(maxPowerByPerms, maxPowerByRegion);
+
+        String powerMode = plugin.getConfig().getString("transmission.power-mode", "vanilla");
+        boolean bookPowerUsed = false;
+        int savedPower = 0;
+
+        if (bookPower > 0) {
+            if ((powerMode.equals("book") || powerMode.equals("both"))
+                    && plugin.getWorldGuardUtils().checkStateFlag(player, clickedBlock,
+                    plugin.getWorldGuardManager().getBookPowerFlag(), true)) {
+                if (bookPower > maxPower) {
+                    plugin.sendMessage(player, "power-limited",
+                            "%max%", String.valueOf(maxPower),
+                            "%book%", String.valueOf(bookPower));
+                    bookPower = maxPower;
+                }
+                savedPower = bookPower;
+                bookPowerUsed = true;
+            }
+        }
+
+        // Проверки прав
         String worldName = clickedBlock.getWorld().getName();
         if (!player.hasPermission("qqredstone.worlds.use." + worldName) 
                 && !player.hasPermission("qqredstone.worlds.use.*")) {
@@ -147,32 +190,6 @@ public class PlayerInteract implements Listener {
                 player.hasPermission("qqredstone.admin.override"))) {
             plugin.sendMessage(player, "already-owned");
             return;
-        }
-
-        String frequency = (bookMeta.getPageCount() > 0) ? bookMeta.getPage(1).trim() : "0";
-
-        int bookPower = readBookPower(bookMeta);
-        int maxPowerByPerms = getMaxPowerByPermission(player);
-        int maxPowerByRegion = plugin.getWorldGuardUtils().getMaxPower(player, clickedBlock);
-        int maxPower = Math.min(maxPowerByPerms, maxPowerByRegion);
-
-        String powerMode = plugin.getConfig().getString("transmission.power-mode", "vanilla");
-        boolean bookPowerUsed = false;
-        int savedPower = 0;
-
-        if (bookPower > 0) {
-            if ((powerMode.equals("book") || powerMode.equals("both"))
-                    && plugin.getWorldGuardUtils().checkStateFlag(player, clickedBlock,
-                    plugin.getWorldGuardManager().getBookPowerFlag(), true)) {
-                if (bookPower > maxPower) {
-                    plugin.sendMessage(player, "power-limited",
-                            "%max%", String.valueOf(maxPower),
-                            "%book%", String.valueOf(bookPower));
-                    bookPower = maxPower;
-                }
-                savedPower = bookPower;
-                bookPowerUsed = true;
-            }
         }
 
         Mechanism mechanism = createMechanismFromBlock(clickedBlock, role, frequency, 
@@ -268,13 +285,20 @@ public class PlayerInteract implements Listener {
         return mechanism;
     }
 
+    /**
+     * Читает мощность из книги (страница 2)
+     * - Число 1-15 → берём
+     * - 0, пустая строка, текст → 15 (по умолчанию)
+     */
     private int readBookPower(BookMeta meta) {
-        if (meta.getPageCount() < 2) return 0;
+        if (meta.getPageCount() < 2) return 15;
+
         try {
             String text = meta.getPage(2).trim();
             text = text.replaceAll("§[0-9a-fk-or]", "").trim();
-            if (text.isEmpty()) return 0;
-            
+
+            if (text.isEmpty()) return 15;
+
             String[] parts = text.split("\\s+");
             for (String part : parts) {
                 try {
@@ -282,11 +306,14 @@ public class PlayerInteract implements Listener {
                     if (power >= 1 && power <= 15) {
                         return power;
                     }
+                    if (power == 0) {
+                        return 15;
+                    }
                 } catch (NumberFormatException ignored) {}
             }
-            return 0;
+            return 15;
         } catch (Exception e) {
-            return 0;
+            return 15;
         }
     }
 
