@@ -246,4 +246,24 @@ public class DatabaseManager {
         if (hasAdminOverride) return false;
         return !m.getOwnerUuid().equals(ownerUuid);
     }
+
+    // ===== ДОБАВИТЬ В DatabaseManager.java =====
+    
+    /**
+     * Очищает все кэши для локации
+     */
+    public void clearCache(Location loc) {
+        String locKey = loc.getWorld().getName() + "," + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ();
+        
+        Mechanism removed = locationCache.remove(locKey);
+        if (removed != null) {
+            if (removed.getType().equals("sender")) {
+                List<Mechanism> senders = frequencySendersCache.get(removed.getFrequency());
+                if (senders != null) senders.remove(removed);
+            } else {
+                List<Mechanism> receivers = frequencyReceiversCache.get(removed.getFrequency());
+                if (receivers != null) receivers.remove(removed);
+            }
+        }
+    }
 }
