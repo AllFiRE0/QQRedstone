@@ -30,6 +30,7 @@ public class QQRedstone extends JavaPlugin {
     private WorldGuardUtils worldGuardUtils;
     private DatabaseManager databaseManager;
     
+    // СПИСКИ названий для разных типов книг
     private List<String> senderNames = new ArrayList<>();
     private List<String> receiverNames = new ArrayList<>();
     private List<String> removerNames = new ArrayList<>();
@@ -65,28 +66,12 @@ public class QQRedstone extends JavaPlugin {
 
         PluginManager pluginManager = Bukkit.getPluginManager();
         
-        // ============================================================
-        // СОЗДАЁМ ЭКЗЕМПЛЯРЫ ДЛЯ СВЯЗЫВАНИЯ
-        // ============================================================
-        RedstoneUpdate redstoneUpdate = new RedstoneUpdate(this, databaseManager);
-        MechanismBreak mechanismBreak = new MechanismBreak(this, databaseManager);
-        
-        // Связываем MechanismBreak с RedstoneUpdate для очистки кэшей
-        mechanismBreak.setRedstoneUpdate(redstoneUpdate);
-        
-        // ============================================================
-        // РЕГИСТРИРУЕМ СЛУШАТЕЛИ
-        // ============================================================
         pluginManager.registerEvents(new PlayerInteract(this, databaseManager), this);
-        pluginManager.registerEvents(redstoneUpdate, this);
-        pluginManager.registerEvents(mechanismBreak, this);
+        pluginManager.registerEvents(new RedstoneUpdate(this, databaseManager), this);
+        pluginManager.registerEvents(new MechanismBreak(this, databaseManager), this);
         pluginManager.registerEvents(new BookRename(), this);
 
-        // ============================================================
-        // КОМАНДЫ
-        // ============================================================
         ReloadCommand reloadCommand = new ReloadCommand(this, databaseManager);
-        reloadCommand.setRedstoneUpdate(redstoneUpdate);
         getCommand("qqredstone").setExecutor(reloadCommand);
 
         getLogger().info(ChatColor.stripColor(getMessage("plugin-enabled")));
@@ -108,6 +93,7 @@ public class QQRedstone extends JavaPlugin {
         }
         langConfig = YamlConfiguration.loadConfiguration(langFile);
         
+        // Загружаем СПИСКИ названий
         senderNames = langConfig.getStringList("device-names.sender");
         if (senderNames.isEmpty()) senderNames.add("Отправитель");
         

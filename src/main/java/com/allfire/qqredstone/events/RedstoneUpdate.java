@@ -3,6 +3,8 @@ package com.allfire.qqredstone.events;
 import com.allfire.qqredstone.QQRedstone;
 import com.allfire.qqredstone.database.DatabaseManager;
 import com.allfire.qqredstone.database.Mechanism;
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -14,14 +16,11 @@ import org.bukkit.block.data.type.LightningRod;
 import org.bukkit.block.data.type.Switch;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class RedstoneUpdate implements Listener {
 
@@ -34,9 +33,6 @@ public class RedstoneUpdate implements Listener {
     private final Map<String, Long> disabledFreqs = new HashMap<>();
     
     private final Set<Location> forcedOffTorches = new HashSet<>();
-    
-    // ===== ФЛАГ ИГНОРИРОВАНИЯ ФИЗИКИ =====
-    private final Set<Location> ignorePhysicsBlocks = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     public RedstoneUpdate(QQRedstone plugin, DatabaseManager databaseManager) {
         this.plugin = plugin;
@@ -44,62 +40,44 @@ public class RedstoneUpdate implements Listener {
     }
 
     /**
-     * Безопасное применение состояния блока с принудительным обновлением редстоун-сети.
+     * Безопасное применение состояния блока с принудительным обновлением редстоун-сети
      */
     private void applyBlockState(Block block, BlockData data) {
-        Location loc = block.getLocation();
-        
-        ignorePhysicsBlocks.add(loc);
-        
-        try {
-            block.setBlockData(data, true);
-            block.getState().update(true, true);
-        } finally {
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                ignorePhysicsBlocks.remove(loc);
-            }, 2L);
-        }
+        block.setBlockData(data, false);
+        block.getState().update(true, true);
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler
     public void onRedstoneChange(BlockRedstoneEvent event) {
         Block block = event.getBlock();
-        
-        if (ignorePhysicsBlocks.contains(block.getLocation())) {
-            return;
-        }
-        
         processBlock(block);
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler
     public void onBlockPhysics(BlockPhysicsEvent event) {
         Block block = event.getBlock();
-        Location loc = block.getLocation();
-        
-        if (ignorePhysicsBlocks.contains(loc)) {
-            event.setCancelled(true);
-            return;
-        }
-        
         Material m = block.getType();
         
-        // Валидация: если блок стал воздухом, удаляем механизм
-        if (m == Material.AIR || m == Material.WATER || m == Material.LAVA) {
-            Mechanism mech = databaseManager.getMechanismAt(block);
-            if (mech != null) {
-                databaseManager.removeMechanism(
-                    block.getWorld().getName(),
-                    block.getX(), block.getY(), block.getZ()
-                );
-                forcedOffTorches.remove(loc);
-                poweredSenders.remove(loc);
-                plugin.getLogger().info("[QQR] Механизм удалён (блок стал " + m.name() + "): " + loc);
+        if ((m == Material.REDSTONE_TORCH || m == Material.REDSTONE_WALL_TORCH)
+                && forcedOffTorches.contains(block.getLocation())) {
+            
+            if (block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
+                if (lightable.isLit()) {
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (block.getType() == m && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                            org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
+                            if (l.isLit() && forcedOffTorches.contains(block.getLocation())) {
+                                l.setLit(false);
+                                applyBlockState(block, l);
+                            }
+                        }
+                    });
+                }
             }
             return;
         }
         
-        // Обрабатываем только нужные типы блоков
         if (m != Material.LEVER && 
             !m.name().contains("BUTTON") && 
             !m.name().contains("PRESSURE_PLATE") &&
@@ -108,83 +86,26 @@ public class RedstoneUpdate implements Listener {
             m != Material.REDSTONE_WALL_TORCH) {
             return;
         }
-        
-        // Обработка принудительно выключенных факелов
-        if ((m == Material.REDSTONE_TORCH || m == Material.REDSTONE_WALL_TORCH)
-                && forcedOffTorches.contains(loc)) {
-            
-            if (block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
-                if (lightable.isLit()) {
-                    ignorePhysicsBlocks.add(loc);
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        try {
-                            if (block.getType() == m && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                                org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-                                if (l.isLit() && forcedOffTorches.contains(loc)) {
-                                    l.setLit(false);
-                                    block.setBlockData(l, true);
-                                    block.getState().update(true, true);
-                                }
-                            }
-                        } finally {
-                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                                ignorePhysicsBlocks.remove(loc);
-                            }, 2L);
-                        }
-                    });
-                }
-            }
-            return;
-        }
-        
         processBlock(block);
-    }
-
-    // ===== СЛУШАТЕЛЬ: ВОДА/ЛАВА =====
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onBlockFromTo(BlockFromToEvent event) {
-        Block toBlock = event.getToBlock();
-        if (toBlock == null) return;
-        
-        Material liquid = event.getBlock().getType();
-        if (liquid != Material.WATER && liquid != Material.LAVA) return;
-        
-        Mechanism mech = databaseManager.getMechanismAt(toBlock);
-        if (mech != null) {
-            databaseManager.removeMechanism(
-                toBlock.getWorld().getName(),
-                toBlock.getX(), toBlock.getY(), toBlock.getZ()
-            );
-            forcedOffTorches.remove(toBlock.getLocation());
-            poweredSenders.remove(toBlock.getLocation());
-            plugin.getLogger().info("[QQR] Механизм удалён (залит " + liquid.name() + "): " + toBlock.getLocation());
-        }
     }
 
     private void processBlock(Block block) {
         Mechanism sender = databaseManager.getMechanismAt(block);
         if (sender == null || !sender.getType().equals("sender")) return;
 
-        if (!isValidMechanismBlock(block)) {
-            databaseManager.removeMechanism(
-                sender.getWorld(), sender.getX(), sender.getY(), sender.getZ()
-            );
-            forcedOffTorches.remove(block.getLocation());
-            poweredSenders.remove(block.getLocation());
+        String freq = sender.getFrequency().trim();
+
+        Material m = block.getType();
+        if (m == Material.AIR || m == Material.WATER || m == Material.LAVA ||
+            !isValidMechanismBlock(block)) {
+            databaseManager.removeMechanism(sender.getWorld(), sender.getX(), sender.getY(), sender.getZ());
             return;
         }
 
         if (!validateAttachedBlock(sender, block)) {
-            databaseManager.removeMechanism(
-                sender.getWorld(), sender.getX(), sender.getY(), sender.getZ()
-            );
-            forcedOffTorches.remove(block.getLocation());
-            poweredSenders.remove(block.getLocation());
+            databaseManager.removeMechanism(sender.getWorld(), sender.getX(), sender.getY(), sender.getZ());
             return;
         }
-
-        String freq = sender.getFrequency().trim();
 
         if (isFreqDisabled(freq)) return;
         if (isOnCooldown(freq)) return;
@@ -307,6 +228,7 @@ public class RedstoneUpdate implements Listener {
         finalPower = Math.min(finalPower, configMaxPower);
 
         List<Mechanism> receivers = databaseManager.getReceiversForFrequency(freq);
+        
         boolean crossWorldEnabled = plugin.getConfig().getBoolean("transmission.allow-cross-world", true);
 
         for (Mechanism receiver : receivers) {
@@ -322,22 +244,12 @@ public class RedstoneUpdate implements Listener {
                 }
             }
             
-            Location loc = new Location(Bukkit.getWorld(receiver.getWorld()), receiver.getX(), receiver.getY(), receiver.getZ());
+            Location loc = new Location(Bukkit.getWorld(receiver.getWorld()),
+                receiver.getX(), receiver.getY(), receiver.getZ());
             Block receiverBlock = loc.getBlock();
             
-            if (!isValidMechanismBlock(receiverBlock)) {
-                databaseManager.removeMechanism(
-                    receiver.getWorld(), receiver.getX(), receiver.getY(), receiver.getZ()
-                );
-                forcedOffTorches.remove(loc);
-                continue;
-            }
-            
             if (!validateAttachedBlock(receiver, receiverBlock)) {
-                databaseManager.removeMechanism(
-                    receiver.getWorld(), receiver.getX(), receiver.getY(), receiver.getZ()
-                );
-                forcedOffTorches.remove(loc);
+                databaseManager.removeMechanism(receiver.getWorld(), receiver.getX(), receiver.getY(), receiver.getZ());
                 continue;
             }
             
@@ -345,262 +257,328 @@ public class RedstoneUpdate implements Listener {
         }
     }
 
-    // ===== ИСПРАВЛЕННАЯ ЛОГИКА АКТИВАЦИИ ПОЛУЧАТЕЛЯ =====
     private void activateReceiver(Block block, boolean isOn, String senderType) {
         String type = block.getType().name();
-        Location loc = block.getLocation();
 
-        // ==========================================
-        // ПОЛУЧАТЕЛЬ — КНОПКА (BUTTON)
-        // ==========================================
-        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch) {
+        // ===== КНОПКА-ПОЛУЧАТЕЛЬ =====
+        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.contains("LEVER")) {
             Switch s = (Switch) block.getBlockData();
+            s.setPowered(isOn);
+            applyBlockState(block, s);
+            return;
+        }
 
-            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE") || 
-                senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
-                
-                if (isOn) {
-                    ignorePhysicsBlocks.add(loc);
-                    s.setPowered(true);
-                    block.setBlockData(s, true);
-                    block.getState().update(true, true);
-                    
-                    int duration = getButtonDuration(block);
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        try {
-                            if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
-                                Switch ss = (Switch) block.getBlockData();
-                                if (ss.isPowered()) {
-                                    ignorePhysicsBlocks.add(loc);
-                                    ss.setPowered(false);
-                                    block.setBlockData(ss, true);
-                                    block.getState().update(true, true);
-                                }
-                            }
-                        } finally {
-                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                                ignorePhysicsBlocks.remove(loc);
-                            }, 2L);
+        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.contains("BUTTON")) {
+            Switch s = (Switch) block.getBlockData();
+            if (!isOn) {
+                s.setPowered(true);
+                applyBlockState(block, s);
+                int duration = getButtonDuration(block);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
+                        Switch ss = (Switch) block.getBlockData();
+                        if (ss.isPowered()) {
+                            ss.setPowered(false);
+                            applyBlockState(block, ss);
                         }
-                    }, duration);
-                }
-                return;
+                    }
+                }, duration);
             }
+            return;
+        }
 
-            if (senderType.contains("LEVER")) {
-                ignorePhysicsBlocks.add(loc);
+        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.contains("PRESSURE_PLATE")) {
+            Switch s = (Switch) block.getBlockData();
+            if (!isOn) {
+                s.setPowered(true);
+                applyBlockState(block, s);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
+                        Switch ss = (Switch) block.getBlockData();
+                        if (ss.isPowered()) {
+                            ss.setPowered(false);
+                            applyBlockState(block, ss);
+                        }
+                    }
+                }, 15L);
+            }
+            return;
+        }
+
+        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.contains("LIGHTNING_ROD")) {
+            Switch s = (Switch) block.getBlockData();
+            if (!isOn) {
+                s.setPowered(true);
+                applyBlockState(block, s);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
+                        Switch ss = (Switch) block.getBlockData();
+                        if (ss.isPowered()) {
+                            ss.setPowered(false);
+                            applyBlockState(block, ss);
+                        }
+                    }
+                }, 15L);
+            }
+            return;
+        }
+
+        if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && 
+            (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
+            Switch s = (Switch) block.getBlockData();
+            if (!isOn) {
+                s.setPowered(true);
+                applyBlockState(block, s);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("BUTTON") && block.getBlockData() instanceof Switch) {
+                        Switch ss = (Switch) block.getBlockData();
+                        if (ss.isPowered()) {
+                            ss.setPowered(false);
+                            applyBlockState(block, ss);
+                        }
+                    }
+                }, 15L);
+            }
+            return;
+        }
+
+        // ===== РЫЧАГ-ПОЛУЧАТЕЛЬ =====
+        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("LEVER")) {
+            Switch s = (Switch) block.getBlockData();
+            if (s.isPowered() != isOn) {
                 s.setPowered(isOn);
-                block.setBlockData(s, true);
-                block.getState().update(true, true);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    ignorePhysicsBlocks.remove(loc);
-                }, 2L);
-                return;
+                applyBlockState(block, s);
             }
+            return;
         }
 
-        // ==========================================
-        // ПОЛУЧАТЕЛЬ — РЫЧАГ (LEVER)
-        // ==========================================
-        if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
+        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("BUTTON")) {
             Switch s = (Switch) block.getBlockData();
-
-            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
-                if (isOn) {
-                    ignorePhysicsBlocks.add(loc);
-                    s.setPowered(!s.isPowered());
-                    block.setBlockData(s, true);
-                    block.getState().update(true, true);
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        ignorePhysicsBlocks.remove(loc);
-                    }, 2L);
-                }
-                return;
+            if (isOn) {
+                s.setPowered(!s.isPowered());
+                applyBlockState(block, s);
             }
-
-            if (senderType.contains("LEVER") || senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
-                if (s.isPowered() != isOn) {
-                    ignorePhysicsBlocks.add(loc);
-                    s.setPowered(isOn);
-                    block.setBlockData(s, true);
-                    block.getState().update(true, true);
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        ignorePhysicsBlocks.remove(loc);
-                    }, 2L);
-                }
-                return;
-            }
+            return;
         }
 
-        // ==========================================
-        // ПОЛУЧАТЕЛЬ — ПЛИТА (PRESSURE_PLATE)
-        // ==========================================
-        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("PRESSURE_PLATE")) {
+            Switch s = (Switch) block.getBlockData();
+            if (isOn) {
+                s.setPowered(!s.isPowered());
+                applyBlockState(block, s);
+            }
+            return;
+        }
+
+        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("LIGHTNING_ROD")) {
+            Switch s = (Switch) block.getBlockData();
+            if (s.isPowered() != isOn) {
+                s.setPowered(isOn);
+                applyBlockState(block, s);
+            }
+            return;
+        }
+
+        if (type.equals("LEVER") && block.getBlockData() instanceof Switch && 
+            (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
+            Switch s = (Switch) block.getBlockData();
+            if (s.isPowered() != isOn) {
+                s.setPowered(isOn);
+                applyBlockState(block, s);
+            }
+            return;
+        }
+
+        // ===== ПЛИТА-ПОЛУЧАТЕЛЬ =====
+        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("LEVER")) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
+            p.setPowered(isOn);
+            applyBlockState(block, p);
+            return;
+        }
 
-            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE") || 
-                senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
-                
-                if (isOn) {
-                    ignorePhysicsBlocks.add(loc);
-                    p.setPowered(true);
-                    block.setBlockData(p, true);
-                    block.getState().update(true, true);
-                    
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        try {
-                            if (block.getType().name().contains("PRESSURE_PLATE") && 
-                                block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
-                                org.bukkit.block.data.Powerable pp = 
-                                    (org.bukkit.block.data.Powerable) block.getBlockData();
-                                if (pp.isPowered()) {
-                                    ignorePhysicsBlocks.add(loc);
-                                    pp.setPowered(false);
-                                    block.setBlockData(pp, true);
-                                    block.getState().update(true, true);
-                                }
-                            }
-                        } finally {
-                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                                ignorePhysicsBlocks.remove(loc);
-                            }, 2L);
-                        }
-                    }, 15L);
-                }
-                return;
-            }
-
-            if (senderType.contains("LEVER")) {
-                ignorePhysicsBlocks.add(loc);
-                p.setPowered(isOn);
-                block.setBlockData(p, true);
-                block.getState().update(true, true);
+        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("BUTTON")) {
+            org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
+            if (!isOn) {
+                p.setPowered(true);
+                applyBlockState(block, p);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    ignorePhysicsBlocks.remove(loc);
-                }, 2L);
-                return;
-            }
-        }
-
-        // ==========================================
-        // ПОЛУЧАТЕЛЬ — ГРОМООТВОД (LIGHTNING_ROD)
-        // ==========================================
-        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
-            LightningRod r = (LightningRod) block.getBlockData();
-
-            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
-                if (isOn) {
-                    ignorePhysicsBlocks.add(loc);
-                    r.setPowered(true);
-                    block.setBlockData(r, true);
-                    block.getState().update(true, true);
-                    
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        try {
-                            if (block.getType().name().contains("LIGHTNING_ROD") && 
-                                block.getBlockData() instanceof LightningRod) {
-                                LightningRod rr = (LightningRod) block.getBlockData();
-                                if (rr.isPowered()) {
-                                    ignorePhysicsBlocks.add(loc);
-                                    rr.setPowered(false);
-                                    block.setBlockData(rr, true);
-                                    block.getState().update(true, true);
-                                }
-                            }
-                        } finally {
-                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                                ignorePhysicsBlocks.remove(loc);
-                            }, 2L);
+                    if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+                        org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
+                        if (pp.isPowered()) {
+                            pp.setPowered(false);
+                            applyBlockState(block, pp);
                         }
-                    }, 15L);
-                }
-                return;
+                    }
+                }, 15L);
             }
-
-            if (senderType.contains("LEVER") || senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
-                if (r.isPowered() != isOn) {
-                    ignorePhysicsBlocks.add(loc);
-                    r.setPowered(isOn);
-                    block.setBlockData(r, true);
-                    block.getState().update(true, true);
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        ignorePhysicsBlocks.remove(loc);
-                    }, 2L);
-                }
-                return;
-            }
+            return;
         }
 
-        // ==========================================
-        // ПОЛУЧАТЕЛЬ — РЕДСТОУН-ФАКЕЛ (TORCH)
-        // ==========================================
+        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("PRESSURE_PLATE")) {
+            org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
+            if (!isOn) {
+                p.setPowered(true);
+                applyBlockState(block, p);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+                        org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
+                        if (pp.isPowered()) {
+                            pp.setPowered(false);
+                            applyBlockState(block, pp);
+                        }
+                    }
+                }, 15L);
+            }
+            return;
+        }
+
+        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("LIGHTNING_ROD")) {
+            org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
+            if (!isOn) {
+                p.setPowered(true);
+                applyBlockState(block, p);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+                        org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
+                        if (pp.isPowered()) {
+                            pp.setPowered(false);
+                            applyBlockState(block, pp);
+                        }
+                    }
+                }, 15L);
+            }
+            return;
+        }
+
+        if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && 
+            (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
+            org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
+            if (!isOn) {
+                p.setPowered(true);
+                applyBlockState(block, p);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
+                        org.bukkit.block.data.Powerable pp = (org.bukkit.block.data.Powerable) block.getBlockData();
+                        if (pp.isPowered()) {
+                            pp.setPowered(false);
+                            applyBlockState(block, pp);
+                        }
+                    }
+                }, 15L);
+            }
+            return;
+        }
+
+        // ===== ГРОМООТВОД-ПОЛУЧАТЕЛЬ =====
+        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("LEVER")) {
+            LightningRod r = (LightningRod) block.getBlockData();
+            r.setPowered(isOn);
+            applyBlockState(block, r);
+            return;
+        }
+
+        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("BUTTON")) {
+            LightningRod r = (LightningRod) block.getBlockData();
+            if (!isOn) {
+                r.setPowered(true);
+                applyBlockState(block, r);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
+                        LightningRod rr = (LightningRod) block.getBlockData();
+                        if (rr.isPowered()) {
+                            rr.setPowered(false);
+                            applyBlockState(block, rr);
+                        }
+                    }
+                }, 15L);
+            }
+            return;
+        }
+
+        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("PRESSURE_PLATE")) {
+            LightningRod r = (LightningRod) block.getBlockData();
+            if (!isOn) {
+                r.setPowered(true);
+                applyBlockState(block, r);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (block.getType().name().contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
+                        LightningRod rr = (LightningRod) block.getBlockData();
+                        if (rr.isPowered()) {
+                            rr.setPowered(false);
+                            applyBlockState(block, rr);
+                        }
+                    }
+                }, 15L);
+            }
+            return;
+        }
+
+        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("LIGHTNING_ROD")) {
+            LightningRod r = (LightningRod) block.getBlockData();
+            r.setPowered(isOn);
+            applyBlockState(block, r);
+            return;
+        }
+
+        if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && 
+            (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
+            LightningRod r = (LightningRod) block.getBlockData();
+            r.setPowered(isOn);
+            applyBlockState(block, r);
+            return;
+        }
+
+        // ===== ФАКЕЛ-ПОЛУЧАТЕЛЬ =====
         if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
+            boolean current = l.isLit();
+            Location loc = block.getLocation();
 
-            // КНОПКА -> ФАКЕЛ (Импульс)
-            // ПЛИТА -> ФАКЕЛ (Импульс)
-            if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
-                if (isOn) {
-                    ignorePhysicsBlocks.add(loc);
-                    l.setLit(false);
-                    block.setBlockData(l, true);
-                    block.getState().update(true, true);
-                    forcedOffTorches.add(loc);
-                    
-                    int duration = senderType.contains("BUTTON") ? getButtonDuration(block) : 15;
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        try {
-                            if ((block.getType().name().equals("REDSTONE_TORCH") || 
-                                 block.getType().name().equals("REDSTONE_WALL_TORCH"))
-                                    && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                                org.bukkit.block.data.Lightable ll = 
-                                    (org.bukkit.block.data.Lightable) block.getBlockData();
-                                ignorePhysicsBlocks.add(loc);
-                                ll.setLit(true);
-                                block.setBlockData(ll, true);
-                                block.getState().update(true, true);
-                                forcedOffTorches.remove(loc);
-                            }
-                        } finally {
-                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                                ignorePhysicsBlocks.remove(loc);
-                            }, 2L);
-                        }
-                    }, duration);
-                }
-                return;
-            }
-
-            // РЫЧАГ -> ФАКЕЛ (Инверсия)
-            // ГРОМООТВОД -> ФАКЕЛ (Инверсия)
-            // ФАКЕЛ -> ФАКЕЛ (Повторяет состояние)
-            if (senderType.contains("LEVER") || senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
-                boolean shouldBeLit;
-                if (senderType.contains("TORCH")) {
-                    shouldBeLit = isOn;
-                } else {
-                    shouldBeLit = !isOn;
-                }
-                
-                if (l.isLit() != shouldBeLit) {
-                    ignorePhysicsBlocks.add(loc);
+            if (senderType.contains("LEVER")) {
+                boolean shouldBeLit = !isOn;
+                if (current != shouldBeLit) {
                     l.setLit(shouldBeLit);
-                    block.setBlockData(l, true);
-                    block.getState().update(true, true);
+                    applyBlockState(block, l);
                     
                     if (!shouldBeLit) {
                         forcedOffTorches.add(loc);
                     } else {
                         forcedOffTorches.remove(loc);
                     }
-                    
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        ignorePhysicsBlocks.remove(loc);
-                    }, 2L);
                 }
-                return;
+            } else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+                if (isOn) {
+                    l.setLit(false);
+                    applyBlockState(block, l);
+                    forcedOffTorches.add(loc);
+                    
+                    int duration = 15;
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        forcedOffTorches.remove(loc);
+                        if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
+                                && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                            org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
+                            ll.setLit(current);
+                            applyBlockState(block, ll);
+                        }
+                    }, duration);
+                }
+            } else {
+                boolean shouldBeLit = !isOn;
+                if (current != shouldBeLit) {
+                    l.setLit(shouldBeLit);
+                    applyBlockState(block, l);
+                    
+                    if (!shouldBeLit) {
+                        forcedOffTorches.add(loc);
+                    } else {
+                        forcedOffTorches.remove(loc);
+                    }
+                }
             }
+            return;
         }
     }
 
@@ -615,22 +593,6 @@ public class RedstoneUpdate implements Listener {
         return 10;
     }
 
-    // ===== ВСПОМОГАТЕЛЬНЫЙ МЕТОД ДЛЯ УДАЛЕНИЯ МЕХАНИЗМА =====
-    public void removeMechanism(Location loc) {
-        if (loc == null) return;
-        Block block = loc.getBlock();
-        Mechanism mech = databaseManager.getMechanismAt(block);
-        if (mech != null) {
-            databaseManager.removeMechanism(
-                block.getWorld().getName(),
-                block.getX(), block.getY(), block.getZ()
-            );
-            forcedOffTorches.remove(loc);
-            poweredSenders.remove(loc);
-        }
-    }
-
-    // ===== ОСТАЛЬНЫЕ МЕТОДЫ =====
     private boolean isFreqDisabled(String freq) {
         if (!disabledFreqs.containsKey(freq)) return false;
         long until = disabledFreqs.get(freq);
