@@ -21,6 +21,7 @@ import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class RedstoneUpdate implements Listener {
 
@@ -34,7 +35,7 @@ public class RedstoneUpdate implements Listener {
     
     private final Set<Location> forcedOffTorches = new HashSet<>();
     
-    // ===== НОВЫЙ ФЛАГ ИГНОРИРОВАНИЯ ФИЗИКИ =====
+    // ===== ФЛАГ ИГНОРИРОВАНИЯ ФИЗИКИ =====
     private final Set<Location> ignorePhysicsBlocks = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     public RedstoneUpdate(QQRedstone plugin, DatabaseManager databaseManager) {
@@ -44,19 +45,16 @@ public class RedstoneUpdate implements Listener {
 
     /**
      * Безопасное применение состояния блока с принудительным обновлением редстоун-сети.
-     * Флаг true заставляет Bukkit вызвать BlockPhysicsEvent и обновить соседей.
      */
     private void applyBlockState(Block block, BlockData data) {
         Location loc = block.getLocation();
         
-        // Добавляем в игнор-лист ПЕРЕД изменением
         ignorePhysicsBlocks.add(loc);
         
         try {
             block.setBlockData(data, true);
             block.getState().update(true, true);
         } finally {
-            // Удаляем из игнор-листа через 2 тика, чтобы физика успела отработать
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 ignorePhysicsBlocks.remove(loc);
             }, 2L);
@@ -67,7 +65,6 @@ public class RedstoneUpdate implements Listener {
     public void onRedstoneChange(BlockRedstoneEvent event) {
         Block block = event.getBlock();
         
-        // ===== ПРОВЕРКА ИГНОР-ЛИСТА =====
         if (ignorePhysicsBlocks.contains(block.getLocation())) {
             return;
         }
@@ -80,15 +77,14 @@ public class RedstoneUpdate implements Listener {
         Block block = event.getBlock();
         Location loc = block.getLocation();
         
-        // ===== ПРОВЕРКА ИГНОР-ЛИСТА =====
         if (ignorePhysicsBlocks.contains(loc)) {
-            event.setCancelled(true); // Отменяем физику, чтобы избежать циклов
+            event.setCancelled(true);
             return;
         }
         
         Material m = block.getType();
         
-        // ===== ВАЛИДАЦИЯ: если блок стал воздухом, удаляем механизм =====
+        // Валидация: если блок стал воздухом, удаляем механизм
         if (m == Material.AIR || m == Material.WATER || m == Material.LAVA) {
             Mechanism mech = databaseManager.getMechanismAt(block);
             if (mech != null) {
@@ -113,14 +109,13 @@ public class RedstoneUpdate implements Listener {
             return;
         }
         
-        // ===== ОБРАБОТКА ПРИНУДИТЕЛЬНО ВЫКЛЮЧЕННЫХ ФАКЕЛОВ =====
+        // Обработка принудительно выключенных факелов
         if ((m == Material.REDSTONE_TORCH || m == Material.REDSTONE_WALL_TORCH)
                 && forcedOffTorches.contains(loc)) {
             
             if (block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
                 org.bukkit.block.data.Lightable lightable = (org.bukkit.block.data.Lightable) block.getBlockData();
                 if (lightable.isLit()) {
-                    // Добавляем в игнор-лист перед изменением
                     ignorePhysicsBlocks.add(loc);
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         try {
@@ -146,7 +141,7 @@ public class RedstoneUpdate implements Listener {
         processBlock(block);
     }
 
-    // ===== НОВЫЙ СЛУШАТЕЛЬ: ВОДА/ЛАВА =====
+    // ===== СЛУШАТЕЛЬ: ВОДА/ЛАВА =====
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockFromTo(BlockFromToEvent event) {
         Block toBlock = event.getToBlock();
@@ -168,15 +163,9 @@ public class RedstoneUpdate implements Listener {
     }
 
     private void processBlock(Block block) {
-        // ===== ЖЁСТКАЯ ВАЛИДАЦИЯ ТИПА БЛОКА =====
         Mechanism sender = databaseManager.getMechanismAt(block);
         if (sender == null || !sender.getType().equals("sender")) return;
 
-        // Проверяем, соответствует ли текущий тип блока сохранённому
-        String currentType = block.getType().name();
-        String savedType = sender.getAttachedType(); // Используем attachedType как основной тип механизма
-        
-        // Если типы не совпадают - удаляем механизм
         if (!isValidMechanismBlock(block)) {
             databaseManager.removeMechanism(
                 sender.getWorld(), sender.getX(), sender.getY(), sender.getZ()
@@ -186,7 +175,6 @@ public class RedstoneUpdate implements Listener {
             return;
         }
 
-        // Проверка прикреплённого блока
         if (!validateAttachedBlock(sender, block)) {
             databaseManager.removeMechanism(
                 sender.getWorld(), sender.getX(), sender.getY(), sender.getZ()
@@ -337,7 +325,6 @@ public class RedstoneUpdate implements Listener {
             Location loc = new Location(Bukkit.getWorld(receiver.getWorld()), receiver.getX(), receiver.getY(), receiver.getZ());
             Block receiverBlock = loc.getBlock();
             
-            // ===== ПРОВЕРКА: существует ли блок-получатель =====
             if (!isValidMechanismBlock(receiverBlock)) {
                 databaseManager.removeMechanism(
                     receiver.getWorld(), receiver.getX(), receiver.getY(), receiver.getZ()
@@ -369,10 +356,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("BUTTON") && block.getBlockData() instanceof Switch) {
             Switch s = (Switch) block.getBlockData();
 
-            // Кнопка -> Кнопка (Импульс при нажатии)
-            // Плита -> Кнопка (Импульс)
-            // Громоотвод -> Кнопка (Импульс)
-            // Факел -> Кнопка (Импульс)
             if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE") || 
                 senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
                 
@@ -404,7 +387,6 @@ public class RedstoneUpdate implements Listener {
                 return;
             }
 
-            // Рычаг -> Кнопка (Держит состояние)
             if (senderType.contains("LEVER")) {
                 ignorePhysicsBlocks.add(loc);
                 s.setPowered(isOn);
@@ -423,8 +405,6 @@ public class RedstoneUpdate implements Listener {
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch) {
             Switch s = (Switch) block.getBlockData();
 
-            // Кнопка -> Рычаг (Переключение при нажатии)
-            // Плита -> Рычаг (Переключение при нажатии)
             if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
                 if (isOn) {
                     ignorePhysicsBlocks.add(loc);
@@ -438,9 +418,6 @@ public class RedstoneUpdate implements Listener {
                 return;
             }
 
-            // Рычаг -> Рычаг (Держит состояние)
-            // Громоотвод -> Рычаг (Держит состояние)
-            // Факел -> Рычаг (Держит состояние)
             if (senderType.contains("LEVER") || senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
                 if (s.isPowered() != isOn) {
                     ignorePhysicsBlocks.add(loc);
@@ -461,10 +438,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
 
-            // Кнопка -> Плита (Импульс)
-            // Плита -> Плита (Импульс)
-            // Громоотвод -> Плита (Импульс)
-            // Факел -> Плита (Импульс)
             if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE") || 
                 senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
                 
@@ -497,7 +470,6 @@ public class RedstoneUpdate implements Listener {
                 return;
             }
 
-            // Рычаг -> Плита (Держит состояние)
             if (senderType.contains("LEVER")) {
                 ignorePhysicsBlocks.add(loc);
                 p.setPowered(isOn);
@@ -516,8 +488,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod) {
             LightningRod r = (LightningRod) block.getBlockData();
 
-            // Кнопка -> Громоотвод (Импульс)
-            // Плита -> Громоотвод (Импульс)
             if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
                 if (isOn) {
                     ignorePhysicsBlocks.add(loc);
@@ -547,9 +517,6 @@ public class RedstoneUpdate implements Listener {
                 return;
             }
 
-            // Рычаг -> Громоотвод (Держит состояние)
-            // Громоотвод -> Громоотвод (Держит состояние)
-            // Факел -> Громоотвод (Держит состояние)
             if (senderType.contains("LEVER") || senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
                 if (r.isPowered() != isOn) {
                     ignorePhysicsBlocks.add(loc);
@@ -571,19 +538,17 @@ public class RedstoneUpdate implements Listener {
                 && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
 
-            // ===== КНОПКА -> ФАКЕЛ (Импульс: гаснет при нажатии, загорается через время) =====
-            // ===== ПЛИТА -> ФАКЕЛ (Импульс: гаснет при нажатии, загорается через время) =====
+            // КНОПКА -> ФАКЕЛ (Импульс)
+            // ПЛИТА -> ФАКЕЛ (Импульс)
             if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
                 if (isOn) {
-                    // Гасим факел
                     ignorePhysicsBlocks.add(loc);
                     l.setLit(false);
                     block.setBlockData(l, true);
                     block.getState().update(true, true);
                     forcedOffTorches.add(loc);
                     
-                    // Через время зажигаем обратно
-                    int duration = senderType.contains("BUTTON") ? getButtonDuration(block) : 15L;
+                    int duration = senderType.contains("BUTTON") ? getButtonDuration(block) : 15;
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
                         try {
                             if ((block.getType().name().equals("REDSTONE_TORCH") || 
@@ -607,17 +572,15 @@ public class RedstoneUpdate implements Listener {
                 return;
             }
 
-            // ===== РЫЧАГ -> ФАКЕЛ (Инверсия: рычаг ВКЛ -> факел ВЫКЛ) =====
-            // ===== ГРОМООТВОД -> ФАКЕЛ (Инверсия) =====
-            // ===== ФАКЕЛ -> ФАКЕЛ (Инверсия: повторяет состояние отправителя) =====
+            // РЫЧАГ -> ФАКЕЛ (Инверсия)
+            // ГРОМООТВОД -> ФАКЕЛ (Инверсия)
+            // ФАКЕЛ -> ФАКЕЛ (Повторяет состояние)
             if (senderType.contains("LEVER") || senderType.contains("LIGHTNING_ROD") || senderType.contains("TORCH")) {
-                // Для ФАКЕЛ -> ФАКЕЛ: повторяем состояние (isOn -> зажжён)
-                // Для РЫЧАГ -> ФАКЕЛ и ГРОМООТВОД -> ФАКЕЛ: инверсия
                 boolean shouldBeLit;
                 if (senderType.contains("TORCH")) {
-                    shouldBeLit = isOn; // Повторяем состояние
+                    shouldBeLit = isOn;
                 } else {
-                    shouldBeLit = !isOn; // Инверсия
+                    shouldBeLit = !isOn;
                 }
                 
                 if (l.isLit() != shouldBeLit) {
@@ -654,6 +617,7 @@ public class RedstoneUpdate implements Listener {
 
     // ===== ВСПОМОГАТЕЛЬНЫЙ МЕТОД ДЛЯ УДАЛЕНИЯ МЕХАНИЗМА =====
     public void removeMechanism(Location loc) {
+        if (loc == null) return;
         Block block = loc.getBlock();
         Mechanism mech = databaseManager.getMechanismAt(block);
         if (mech != null) {
@@ -666,9 +630,7 @@ public class RedstoneUpdate implements Listener {
         }
     }
 
-    // ===== ОСТАЛЬНЫЕ МЕТОДЫ (isFreqDisabled, checkAntiFlood, isOnCooldown, resetFreq, resetAllFreqs) =====
-    // ... (оставляем без изменений)
-    
+    // ===== ОСТАЛЬНЫЕ МЕТОДЫ =====
     private boolean isFreqDisabled(String freq) {
         if (!disabledFreqs.containsKey(freq)) return false;
         long until = disabledFreqs.get(freq);
