@@ -3,8 +3,6 @@ package com.allfire.qqredstone.events;
 import com.allfire.qqredstone.QQRedstone;
 import com.allfire.qqredstone.database.DatabaseManager;
 import com.allfire.qqredstone.database.Mechanism;
-import net.md_5.bungee.api.ChatMessageType;
-import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -39,9 +37,6 @@ public class RedstoneUpdate implements Listener {
     @EventHandler
     public void onRedstoneChange(BlockRedstoneEvent event) {
         Block block = event.getBlock();
-        plugin.getLogger().info("[ДЕБАГ] BlockRedstoneEvent: " + block.getType().name() + 
-                " @ " + block.getX() + "," + block.getY() + "," + block.getZ() +
-                " | Old: " + event.getOldCurrent() + " | New: " + event.getNewCurrent());
         processBlock(block);
     }
 
@@ -58,84 +53,47 @@ public class RedstoneUpdate implements Listener {
             m != Material.REDSTONE_WALL_TORCH) {
             return;
         }
-        
-        plugin.getLogger().info("[ДЕБАГ] BlockPhysicsEvent: " + m.name() + 
-                " @ " + block.getX() + "," + block.getY() + "," + block.getZ());
         processBlock(block);
     }
 
     private void processBlock(Block block) {
-        plugin.getLogger().info("[ДЕБАГ] processBlock START: " + block.getType().name() + 
-                " @ " + block.getX() + "," + block.getY() + "," + block.getZ());
-
         Mechanism sender = databaseManager.getMechanismAt(block);
-        if (sender == null) {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: НЕ НАЙДЕН отправитель в БД");
-            return;
-        }
-        if (!sender.getType().equals("sender")) {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: Блок найден, но НЕ отправитель (тип: " + sender.getType() + ")");
-            return;
-        }
-        
-        String freq = sender.getFrequency();
-        freq = freq.trim();
-        
-        plugin.getLogger().info("[ДЕБАГ] processBlock: Найден отправитель! Частота: " + freq);
+        if (sender == null || !sender.getType().equals("sender")) return;
+
+        String freq = sender.getFrequency().trim();
 
         Material m = block.getType();
         if (m == Material.AIR || m == Material.WATER || m == Material.LAVA ||
             !isValidMechanismBlock(block)) {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: Блок испорчен (" + m.name() + "), удаляем механизм-призрак");
             databaseManager.removeMechanism(sender.getWorld(), sender.getX(), sender.getY(), sender.getZ());
             return;
         }
 
         if (!validateAttachedBlock(sender, block)) {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: Блок под механизмом изменился, удаляем");
             databaseManager.removeMechanism(sender.getWorld(), sender.getX(), sender.getY(), sender.getZ());
             return;
         }
 
-        if (isFreqDisabled(freq)) {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: Частота " + freq + " заблокирована");
-            return;
-        }
-        if (isOnCooldown(freq)) {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: Частота " + freq + " на кулдауне");
-            return;
-        }
-        if (!checkAntiFlood(freq, block)) {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: Анти-флуд сработал для частоты " + freq);
-            return;
-        }
+        if (isFreqDisabled(freq)) return;
+        if (isOnCooldown(freq)) return;
+        if (!checkAntiFlood(freq, block)) return;
 
         int power = getMechanismPower(block);
         Location loc = block.getLocation();
         boolean isPoweredNow = (power > 0);
 
-        plugin.getLogger().info("[ДЕБАГ] processBlock: Мощность=" + power + ", isPoweredNow=" + isPoweredNow +
-                " | poweredSenders.containsKey(loc)=" + poweredSenders.containsKey(loc));
-
         if (isPoweredNow && !poweredSenders.containsKey(loc)) {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: СИГНАЛ ВКЛ (первый раз), отправляем!");
             poweredSenders.put(loc, power);
             processSignal(block, power, true, freq, sender);
         } else if (isPoweredNow && poweredSenders.containsKey(loc)) {
             int oldPower = poweredSenders.get(loc);
             if (oldPower != power) {
-                plugin.getLogger().info("[ДЕБАГ] processBlock: Мощность изменилась " + oldPower + " -> " + power + ", отправляем!");
                 poweredSenders.put(loc, power);
                 processSignal(block, power, true, freq, sender);
-            } else {
-                plugin.getLogger().info("[ДЕБАГ] processBlock: Мощность не изменилась, пропускаем");
             }
         } else if (!isPoweredNow && poweredSenders.containsKey(loc)) {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: СИГНАЛ ВЫКЛ, отправляем!");
             poweredSenders.remove(loc);
             processSignal(block, 0, false, freq, sender);
-        } else {
-            plugin.getLogger().info("[ДЕБАГ] processBlock: Нет изменений, пропускаем");
         }
     }
 
@@ -176,35 +134,26 @@ public class RedstoneUpdate implements Listener {
 
     private int getMechanismPower(Block block) {
         String type = block.getType().name();
-        int power = 0;
 
         if (type.equals("LEVER") || type.contains("BUTTON")) {
             if (block.getBlockData() instanceof Switch) {
                 boolean isPhysicallyPressed = ((Switch) block.getBlockData()).isPowered();
                 boolean isPoweredByRedstone = getMaxRedstonePower(block) > 0;
-                power = (isPhysicallyPressed || isPoweredByRedstone) ? 15 : 0;
-                plugin.getLogger().info("[ДЕБАГ] getMechanismPower: " + type + 
-                        " | physicallyPressed=" + isPhysicallyPressed + 
-                        " | redstone=" + isPoweredByRedstone + 
-                        " | power=" + power);
+                return (isPhysicallyPressed || isPoweredByRedstone) ? 15 : 0;
             }
-        } else if (type.contains("PRESSURE_PLATE")) {
-            boolean isPhysicallyPressed = block.getBlockPower(BlockFace.UP) > 0;
-            boolean isPoweredByRedstone = getMaxRedstonePower(block) > 0;
-            power = (isPhysicallyPressed || isPoweredByRedstone) ? 15 : 0;
-            plugin.getLogger().info("[ДЕБАГ] getMechanismPower: PRESSURE_PLATE" +
-                    " | physicallyPressed=" + isPhysicallyPressed +
-                    " | redstone=" + isPoweredByRedstone +
-                    " | power=" + power);
-        } else if (type.contains("LIGHTNING_ROD")) {
-            power = getMaxRedstonePower(block) > 0 ? 15 : 0;
-            plugin.getLogger().info("[ДЕБАГ] getMechanismPower: LIGHTNING_ROD power=" + power);
-        } else {
-            power = getMaxRedstonePower(block);
-            plugin.getLogger().info("[ДЕБАГ] getMechanismPower: OTHER (" + type + ") power=" + power);
         }
 
-        return Math.min(power, 15);
+        if (type.contains("PRESSURE_PLATE")) {
+            boolean isPhysicallyPressed = block.getBlockPower(BlockFace.UP) > 0;
+            boolean isPoweredByRedstone = getMaxRedstonePower(block) > 0;
+            return (isPhysicallyPressed || isPoweredByRedstone) ? 15 : 0;
+        }
+
+        if (type.contains("LIGHTNING_ROD")) {
+            return getMaxRedstonePower(block) > 0 ? 15 : 0;
+        }
+
+        return getMaxRedstonePower(block);
     }
 
     private int getMaxRedstonePower(Block block) {
@@ -217,9 +166,6 @@ public class RedstoneUpdate implements Listener {
     }
 
     private void processSignal(Block block, int vanillaPower, boolean isOn, String freq, Mechanism sender) {
-        plugin.getLogger().info("[ДЕБАГ] processSignal START | freq=" + freq + " | isOn=" + isOn + 
-                " | power=" + vanillaPower + " | senderType=" + sender.getType());
-
         String powerMode = plugin.getConfig().getString("transmission.power-mode", "vanilla");
         
         int finalPower = 0;
@@ -242,29 +188,18 @@ public class RedstoneUpdate implements Listener {
         int configMaxPower = plugin.getConfig().getInt("transmission.max-power", 15);
         finalPower = Math.min(finalPower, configMaxPower);
 
-        plugin.getLogger().info("[ДЕБАГ] processSignal: powerMode=" + powerMode + 
-                " | bookPower=" + bookPower + " | finalPower=" + finalPower);
-
         List<Mechanism> receivers = databaseManager.getReceiversForFrequency(freq);
-        plugin.getLogger().info("[ДЕБАГ] processSignal: Найдено получателей на частоте " + freq + ": " + receivers.size());
         
         boolean crossWorldEnabled = plugin.getConfig().getBoolean("transmission.allow-cross-world", true);
 
         for (Mechanism receiver : receivers) {
-            plugin.getLogger().info("[ДЕБАГ] processSignal: Обработка получателя " + 
-                    receiver.getWorld() + "," + receiver.getX() + "," + receiver.getY() + "," + receiver.getZ());
-
             if (!receiver.getWorld().equals(block.getWorld().getName())) {
-                if (!crossWorldEnabled) {
-                    plugin.getLogger().info("[ДЕБАГ] processSignal: Кросс-мир отключён, пропускаем");
-                    continue;
-                }
+                if (!crossWorldEnabled) continue;
                 
                 org.bukkit.OfflinePlayer owner = Bukkit.getOfflinePlayer(UUID.fromString(receiver.getOwnerUuid()));
                 if (owner.isOnline() && owner.getPlayer() != null) {
                     if (!owner.getPlayer().hasPermission("qqredstone.crossworld")
                             && !owner.getPlayer().hasPermission("qqredstone.admin.region.bypass")) {
-                        plugin.getLogger().info("[ДЕБАГ] processSignal: Нет прав на кросс-мир, пропускаем");
                         continue;
                     }
                 }
@@ -275,26 +210,20 @@ public class RedstoneUpdate implements Listener {
             Block receiverBlock = loc.getBlock();
             
             if (!validateAttachedBlock(receiver, receiverBlock)) {
-                plugin.getLogger().info("[ДЕБАГ] processSignal: Получатель сломан, удаляем");
                 databaseManager.removeMechanism(receiver.getWorld(), receiver.getX(), receiver.getY(), receiver.getZ());
                 continue;
             }
             
-            plugin.getLogger().info("[ДЕБАГ] processSignal: Активируем получатель с isOn=" + isOn + 
-                    " | senderType=" + block.getType().name());
             activateReceiver(receiverBlock, isOn, block.getType().name());
         }
     }
 
     private void activateReceiver(Block block, boolean isOn, String senderType) {
         String type = block.getType().name();
-        plugin.getLogger().info("[ДЕБАГ] activateReceiver: БЛОК=" + type + 
-                " @ " + block.getX() + "," + block.getY() + "," + block.getZ() +
-                " | isOn=" + isOn + " | senderType=" + senderType);
 
+        // ===== КНОПКА-ПОЛУЧАТЕЛЬ =====
         if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.contains("LEVER")) {
             Switch s = (Switch) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: РЫЧАГ → КНОПКА (ДЕРЖИТСЯ) setPowered=" + isOn);
             s.setPowered(isOn);
             block.setBlockData(s);
             return;
@@ -303,7 +232,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.contains("BUTTON")) {
             Switch s = (Switch) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: КНОПКА → КНОПКА (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 s.setPowered(true);
                 block.setBlockData(s);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -319,7 +247,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.contains("PRESSURE_PLATE")) {
             Switch s = (Switch) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: ПЛИТА → КНОПКА (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 s.setPowered(true);
                 block.setBlockData(s);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -335,7 +262,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("BUTTON") && block.getBlockData() instanceof Switch && senderType.contains("LIGHTNING_ROD")) {
             Switch s = (Switch) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: ГРОМООТВОД → КНОПКА (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 s.setPowered(true);
                 block.setBlockData(s);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -352,7 +278,6 @@ public class RedstoneUpdate implements Listener {
             (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
             Switch s = (Switch) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: ФАКЕЛ → КНОПКА (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 s.setPowered(true);
                 block.setBlockData(s);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -368,7 +293,6 @@ public class RedstoneUpdate implements Listener {
         // ===== РЫЧАГ-ПОЛУЧАТЕЛЬ =====
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("LEVER")) {
             Switch s = (Switch) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: РЫЧАГ → РЫЧАГ (ПОВТОРЯЕТ) current=" + s.isPowered() + " -> " + isOn);
             if (s.isPowered() != isOn) {
                 s.setPowered(isOn);
                 block.setBlockData(s);
@@ -379,7 +303,6 @@ public class RedstoneUpdate implements Listener {
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("BUTTON")) {
             Switch s = (Switch) block.getBlockData();
             if (isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: КНОПКА → РЫЧАГ (ПЕРЕКЛЮЧЕНИЕ)");
                 s.setPowered(!s.isPowered());
                 block.setBlockData(s);
             }
@@ -389,7 +312,6 @@ public class RedstoneUpdate implements Listener {
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("PRESSURE_PLATE")) {
             Switch s = (Switch) block.getBlockData();
             if (isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: ПЛИТА → РЫЧАГ (ПЕРЕКЛЮЧЕНИЕ)");
                 s.setPowered(!s.isPowered());
                 block.setBlockData(s);
             }
@@ -398,7 +320,6 @@ public class RedstoneUpdate implements Listener {
 
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch && senderType.contains("LIGHTNING_ROD")) {
             Switch s = (Switch) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: ГРОМООТВОД → РЫЧАГ (ПОВТОРЯЕТ)");
             if (s.isPowered() != isOn) {
                 s.setPowered(isOn);
                 block.setBlockData(s);
@@ -409,7 +330,6 @@ public class RedstoneUpdate implements Listener {
         if (type.equals("LEVER") && block.getBlockData() instanceof Switch && 
             (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
             Switch s = (Switch) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: ФАКЕЛ → РЫЧАГ (ПОВТОРЯЕТ)");
             if (s.isPowered() != isOn) {
                 s.setPowered(isOn);
                 block.setBlockData(s);
@@ -420,7 +340,6 @@ public class RedstoneUpdate implements Listener {
         // ===== ПЛИТА-ПОЛУЧАТЕЛЬ =====
         if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("LEVER")) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: РЫЧАГ → ПЛИТА (ДЕРЖИТСЯ)");
             p.setPowered(isOn);
             block.setBlockData(p);
             return;
@@ -429,7 +348,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("BUTTON")) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: КНОПКА → ПЛИТА (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 p.setPowered(true);
                 block.setBlockData(p);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -445,7 +363,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("PRESSURE_PLATE")) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: ПЛИТА → ПЛИТА (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 p.setPowered(true);
                 block.setBlockData(p);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -461,7 +378,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("PRESSURE_PLATE") && block.getBlockData() instanceof org.bukkit.block.data.Powerable && senderType.contains("LIGHTNING_ROD")) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: ГРОМООТВОД → ПЛИТА (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 p.setPowered(true);
                 block.setBlockData(p);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -478,7 +394,6 @@ public class RedstoneUpdate implements Listener {
             (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
             org.bukkit.block.data.Powerable p = (org.bukkit.block.data.Powerable) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: ФАКЕЛ → ПЛИТА (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 p.setPowered(true);
                 block.setBlockData(p);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -494,7 +409,6 @@ public class RedstoneUpdate implements Listener {
         // ===== ГРОМООТВОД-ПОЛУЧАТЕЛЬ =====
         if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("LEVER")) {
             LightningRod r = (LightningRod) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: РЫЧАГ → ГРОМООТВОД (ДЕРЖИТСЯ)");
             r.setPowered(isOn);
             block.setBlockData(r);
             return;
@@ -503,7 +417,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("BUTTON")) {
             LightningRod r = (LightningRod) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: КНОПКА → ГРОМООТВОД (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 r.setPowered(true);
                 block.setBlockData(r);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -519,7 +432,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("PRESSURE_PLATE")) {
             LightningRod r = (LightningRod) block.getBlockData();
             if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: ПЛИТА → ГРОМООТВОД (ИМПУЛЬС ПРИ ОТЖАТИИ)");
                 r.setPowered(true);
                 block.setBlockData(r);
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -534,7 +446,6 @@ public class RedstoneUpdate implements Listener {
 
         if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && senderType.contains("LIGHTNING_ROD")) {
             LightningRod r = (LightningRod) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: ГРОМООТВОД → ГРОМООТВОД (ПОВТОРЯЕТ)");
             r.setPowered(isOn);
             block.setBlockData(r);
             return;
@@ -543,7 +454,6 @@ public class RedstoneUpdate implements Listener {
         if (type.contains("LIGHTNING_ROD") && block.getBlockData() instanceof LightningRod && 
             (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
             LightningRod r = (LightningRod) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: ФАКЕЛ → ГРОМООТВОД (ПОВТОРЯЕТ)");
             r.setPowered(isOn);
             block.setBlockData(r);
             return;
@@ -551,80 +461,41 @@ public class RedstoneUpdate implements Listener {
 
         // ===== ФАКЕЛ-ПОЛУЧАТЕЛЬ =====
         if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
-                && block.getBlockData() instanceof org.bukkit.block.data.Lightable && senderType.contains("LEVER")) {
+                && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
             org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: РЫЧАГ → ФАКЕЛ (ИНВЕРСИЯ)");
-            if (l.isLit() == isOn) {
-                l.setLit(!isOn);
-                block.setBlockData(l);
+            boolean current = l.isLit();
+
+            if (senderType.contains("LEVER")) {
+                // Рычаг → Факел: ИНВЕРСИЯ (синхронно)
+                boolean shouldBeLit = !isOn;
+                if (current != shouldBeLit) {
+                    l.setLit(shouldBeLit);
+                    block.setBlockData(l);
+                }
+            } else if (senderType.contains("BUTTON") || senderType.contains("PRESSURE_PLATE")) {
+                // Кнопка/Плита → Факел: МИГАНИЕ ПРИ ОТЖАТИИ (15 тиков)
+                if (!isOn) {
+                    l.setLit(!current);
+                    block.setBlockData(l);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
+                                && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
+                            org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
+                            ll.setLit(current);
+                            block.setBlockData(ll);
+                        }
+                    }, 15L);
+                }
+            } else {
+                // Громоотвод/Факел → Факел: ИНВЕРСИЯ (синхронно)
+                boolean shouldBeLit = !isOn;
+                if (current != shouldBeLit) {
+                    l.setLit(shouldBeLit);
+                    block.setBlockData(l);
+                }
             }
             return;
         }
-
-        if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
-                && block.getBlockData() instanceof org.bukkit.block.data.Lightable && senderType.contains("BUTTON")) {
-            org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-            if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: КНОПКА → ФАКЕЛ (МИГАНИЕ ПРИ ОТЖАТИИ)");
-                boolean current = l.isLit();
-                l.setLit(!current);
-                block.setBlockData(l);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
-                            && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                        org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
-                        ll.setLit(current);
-                        block.setBlockData(ll);
-                    }
-                }, 15L);
-            }
-            return;
-        }
-
-        if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
-                && block.getBlockData() instanceof org.bukkit.block.data.Lightable && senderType.contains("PRESSURE_PLATE")) {
-            org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-            if (!isOn) {
-                plugin.getLogger().info("[ДЕБАГ] activateReceiver: ПЛИТА → ФАКЕЛ (МИГАНИЕ ПРИ ОТЖАТИИ)");
-                boolean current = l.isLit();
-                l.setLit(!current);
-                block.setBlockData(l);
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    if ((block.getType().name().equals("REDSTONE_TORCH") || block.getType().name().equals("REDSTONE_WALL_TORCH"))
-                            && block.getBlockData() instanceof org.bukkit.block.data.Lightable) {
-                        org.bukkit.block.data.Lightable ll = (org.bukkit.block.data.Lightable) block.getBlockData();
-                        ll.setLit(current);
-                        block.setBlockData(ll);
-                    }
-                }, 15L);
-            }
-            return;
-        }
-
-        if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
-                && block.getBlockData() instanceof org.bukkit.block.data.Lightable && senderType.contains("LIGHTNING_ROD")) {
-            org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: ГРОМООТВОД → ФАКЕЛ (ИНВЕРСИЯ)");
-            if (l.isLit() == isOn) {
-                l.setLit(!isOn);
-                block.setBlockData(l);
-            }
-            return;
-        }
-
-        if ((type.equals("REDSTONE_TORCH") || type.equals("REDSTONE_WALL_TORCH"))
-                && block.getBlockData() instanceof org.bukkit.block.data.Lightable && 
-            (senderType.contains("REDSTONE_TORCH") || senderType.contains("REDSTONE_WALL_TORCH"))) {
-            org.bukkit.block.data.Lightable l = (org.bukkit.block.data.Lightable) block.getBlockData();
-            plugin.getLogger().info("[ДЕБАГ] activateReceiver: ФАКЕЛ → ФАКЕЛ (ИНВЕРСИЯ)");
-            if (l.isLit() == isOn) {
-                l.setLit(!isOn);
-                block.setBlockData(l);
-            }
-            return;
-        }
-
-        plugin.getLogger().warning("[ДЕБАГ] activateReceiver: НЕ НАЙДЕНА КОМБИНАЦИЯ для " + type + " + " + senderType);
     }
 
     private boolean isFreqDisabled(String freq) {
@@ -659,7 +530,7 @@ public class RedstoneUpdate implements Listener {
             disabledFreqs.put(freq, until);
 
             String disableTimeStr = (disableTicks <= 0) ? "навсегда" : (disableTicks / 20) + " сек.";
-            plugin.getLogger().warning("[ДЕБАГ] [АНТИ-ФЛУД] Частота " + freq + " заблокирована на " + disableTimeStr);
+            plugin.getLogger().warning("[АНТИ-ФЛУД] Частота " + freq + " заблокирована на " + disableTimeStr);
 
             if (plugin.getConfig().getBoolean("transmission.anti-flood.notify-admins", true)) {
                 for (Player player : Bukkit.getOnlinePlayers()) {
